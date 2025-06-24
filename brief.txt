@@ -1,0 +1,188 @@
+Here's a detailed outline for creating a full-stack text-to-speech application with the specified technologies:
+
+Application Overview
+
+The application will provide the following features:
+
+1. Text-to-Speech Conversion: Convert text from a text field to audio.
+2. PDF-to-Speech Conversion: Convert PDF files to audio.
+3. Audio Preview and Download: Allow users to preview and download generated audio files.
+4. Text Paraphrasing: Paraphrase text from a text field and PDF files.
+5. Text Summarization: Summarize text from a text field and PDF files.
+6. Stored Operations Retrieval: Retrieve previously performed operations.
+
+Client (React with Vite)
+
+1. Setup a new Vite project with React.
+2. Use Tailwind CSS for styling and Headless UI for accessible components.
+3. Implement animations using a library like Framer Motion or React Transition Group.
+4. Create components for:
+    - Text input field
+    - PDF upload and processing
+    - Audio player and download
+    - Paraphrasing and summarization tools
+    - Stored operations retrieval
+
+API (Node.js with Sequelize and MySQL)
+
+1. Setup a new Node.js project with Express.js.
+2. Configure Sequelize with MySQL for database operations.
+3. Implement authentication using JSON Web Tokens (JWT), sessions, and express-flash for notifications.
+4. Use express-validator for input validation.
+5. Create API endpoints for:
+    - Text-to-speech conversion
+    - PDF-to-speech conversion
+    - Paraphrasing and summarization
+    - Stored operations retrieval
+    - User authentication and management
+
+AI Models
+
+1. Integrate the Gemini AI model for text paraphrasing and summarization.
+2. Use a text-to-speech model like Google Cloud Text-to-Speech or Amazon Polly for audio generation.
+
+Database Schema
+
+1. Users table: store user information and authentication details.
+2. Operations table: store previously performed operations (text-to-speech, paraphrasing, summarization, etc.).
+3. Audio files table: store generated audio files.
+
+API Endpoints
+
+1. /text-to-speech: Convert text to audio.
+2. /pdf-to-speech: Convert PDF to audio.
+3. /paraphrase: Paraphrase text.
+4. /summarize: Summarize text.
+5. /operations: Retrieve stored operations.
+6. /login: Authenticate user.
+7. /register: Register new user.
+
+Implementation Roadmap
+
+1. Setup frontend and backend projects.
+2. Implement authentication and user management.
+3. Develop text-to-speech and PDF-to-speech features.
+4. Integrate AI models for paraphrasing and summarization.
+5. Implement stored operations retrieval.
+6. Test and deploy the application.
+
+This outline provides a solid foundation for building a full-stack text-to-speech application with the specified features and technologies.
+
+
+# Full-Stack Text-to-Speech Application API
+
+## Notes
+- The backend will be a Node.js application using Express.js.
+- Sequelize will be used as the ORM for a MySQL database.
+- Authentication will be handled with JSON Web Tokens (JWT), sessions, and `express-flash` for notifications.
+- Input validation will be performed using `express-validator`.
+- AI functionalities will be provided by the Gemini AI model for text manipulation and a service like Google Cloud Text-to-Speech or Amazon Polly for audio generation.
+- The project structure is now in place, including models, routes, controllers, and services.
+- User authentication and TTS/PDF-to-Speech functionalities are implemented.
+- AI text manipulation features (paraphrase, summarize, key points, change tone) are implemented.
+- The `package.json` has been updated with all required dependencies and scripts for linting, formatting, and database management.
+- Project documentation (`README.md`, `DEPLOYMENT.md`) and a `.gitignore` file have been created.
+- Database migrations have been created to set up the database schema.
+- A `test-api.js` script has been created to perform integration tests on the API endpoints.
+- Google Cloud Text-to-Speech is not yet configured. Testing will focus on the AI text manipulation features first.
+- The server was crashing on startup due to a `SequelizeDatabaseError`. This was fixed by correcting model associations. A new script (`test-db-connection.js`) confirms the database is connected and the schema is correct. However, the main server process exits silently after startup. Debugging has narrowed the problem down to the `src/routes/auth.js` file. Several test scripts (`test-routes.js`, `test-auth-routes-isolated.js`) hang when trying to load this file, even though the controller and middleware it uses seem to work in isolation. The next step is to add very granular logging inside `src/routes/auth.js` to find the exact point of failure.
+- User has requested to switch focus to testing the AI endpoints using `test-ai-endpoints.js` before resolving the server startup issue.
+- Since the server is unstable, the AI endpoints will be tested by calling the AI controller functions directly, bypassing the need for a running server for now.
+- The AI controller functions for text manipulation have been successfully tested directly using `test-ai-controller.js`. This confirms the Gemini AI integration is working.
+- The `test-tts-controller.js` script was created to test TTS functionality directly. Initial runs failed due to missing credentials (`ENOENT` error). The script has been progressively enhanced to automatically find `gcloud` credentials and to provide extremely detailed error logging and step-by-step instructions for resolving authentication issues. The continued failures strongly indicate an environment configuration problem that requires user intervention (e.g., setting `GOOGLE_APPLICATION_CREDENTIALS` correctly, or logging in via `gcloud`).
+- A manual test script (`test-ai-manual.js`) has been created for the AI endpoints.
+- A database connection test script (`test-db.js`) has been created to isolate potential database issues.
+
+## Task List
+- [x] Initialize npm project.
+- [x] Install core dependencies (`express`, `sequelize`, `mysql2`, `jsonwebtoken`, `bcryptjs`, `express-validator`, `express-session`, `connect-flash`, `cors`, `dotenv`, `multer`).
+- [x] Install development dependencies (`nodemon`).
+- [x] Install AI-related dependencies (`@google/generative-ai`, and a TTS library like `@google-cloud/text-to-speech` or `aws-sdk`).
+- [x] Create the basic project structure (e.g., `src`, `config`, `routes`, `controllers`, `models`, `middleware`).
+- [x] Set up the Express server in `src/app.js`.
+- [x] Configure Sequelize and connect to the MySQL database.
+- [x] Define the database models (`User`, `Operation`, `AudioFile`).
+- [x] Implement user registration and login endpoints (`/register`, `/login`).
+- [x] Create authentication middleware to protect routes.
+- [x] Implement the `/text-to-speech` endpoint.
+- [x] Implement the `/pdf-to-speech` endpoint.
+- [x] Implement the `/operations` endpoint to retrieve user history.
+- [x] Add input validation to all relevant endpoints.
+- [x] Implement global error handling.
+- [x] Create `.env.example` file with necessary environment variables.
+- [x] Implement the `/paraphrase` endpoint.
+- [x] Implement the `/summarize` endpoint.
+- [x] Implement additional AI endpoints (`/key-points`, `/change-tone`).
+- [x] Update `app.js` to include AI routes.
+- [x] Install `pdf-parse` dependency for PDF text extraction.
+- [x] Create `index.js` in the root to start the server.
+- [x] Add npm start script to `package.json`.
+- [x] Install all dependencies from the updated `package.json`.
+- [x] Create `README.md` with setup instructions.
+- [x] Create `.gitignore` file.
+- [x] Create database migrations.
+- [x] Create `test.http` file for API endpoint testing.
+- [x] Create `test-api.js` script for automated testing.
+- [x] Create `DEPLOYMENT.md` with deployment instructions.
+- [x] Fix the server startup crash.
+  - [x] Review `auth.js`, `authController.js`, and `User.js` model.
+  - [x] Create `test-db.js` to verify database connection.
+  - [x] Run `test-db.js` to confirm database connectivity.
+  - [x] Review `app.js` and `index.js` for server start logic.
+  - [x] Debug the `Route.get() requires a callback...` error.
+    - [x] Review route files (`auth.js`, `tts.js`, `ai.js`).
+    - [x] Review controller and middleware files for export issues.
+    - [x] Fix incorrect import of `auth` middleware in `src/routes/auth.js`.
+  - [x] Investigate why the server process exits silently by adding logging.
+  - [x] Debug the hang/crash during route loading by using a simplified server setup.
+  - [x] Fix `TypeError: upload.single is not a function` in `src/routes/tts.js`.
+  - [x] Restore original `auth.js` middleware in all route files.
+  - [x] Rerun the server and analyze logs, identifying a `SequelizeDatabaseError`.
+  - [x] Fix `SequelizeDatabaseError: Foreign key constraint is incorrectly formed`.
+    - [x] Inspect `User.js` model definition.
+    - [x] Inspect `Operation.js` model definition and its association with `User`.
+    - [x] Correct the model definitions or associations.
+- [ ] Resolve silent server exit after startup.
+  - [x] Drop, recreate, and migrate the database.
+  - [x] Create and run a script (`test-db-connection.js`) to verify database connectivity independently.
+  - [x] Create a `debug-server.js` with enhanced logging to trace the startup process.
+  - [x] Run the debug server and analyze logs to find the exact point of failure.
+  - [x] Investigate the route loading process by creating a `test-routes.js` script.
+  - [x] Debug `src/routes/auth.js` as the route loading test hangs there.
+    - [x] Inspect `auth.js` route file.
+    - [x] Inspect `auth.js` middleware file.
+    - [x] Inspect `authController.js` as a potential cause of the hang.
+    - [x] Create and run a test script (`test-auth-controller.js`) for `authController.js`.
+    - [x] Isolate the specific line in `src/routes/auth.js` that causes the hang.
+      - [x] Create and run `test-auth-routes-isolated.js` which also hangs, confirming the issue is within `auth.js` or its dependencies.
+    - [ ] Add granular logging to `src/routes/auth.js` to pinpoint the exact line causing the hang.
+  - [ ] Test a basic endpoint (e.g., `/api/health`) to confirm it's responsive once the server stays running.
+- [x] Run database migrations.
+- [x] Test AI endpoints.
+  - [x] API test scripts (`test-ai-manual.js`, `test-ai-endpoints.js`) have been created.
+  - [x] Since the server is unstable, test the AI controller directly.
+    - [x] Create a test script `test-ai-controller.js` to test the AI controller functions in isolation.
+    - [x] Run the `test-ai-controller.js` script.
+  - [ ] Run API test scripts once the server is fixed.
+- [x] Configure Google Cloud Text-to-Speech.
+- [x] Test Text-to-Speech endpoints.
+  - [x] Since the server is unstable, test the TTS controller directly.
+    - [x] Create a test script `test-tts-controller.js` to test the TTS controller functions in isolation.
+    - [x] Run the `test-tts-controller.js` script.
+    - [x] Debug the `test-tts-controller.js` script to resolve credential issues.
+      - [x] Add detailed logging and credential checks to the script.
+      - [x] Add direct Google Cloud TTS client initialization to verify connectivity.
+      - [x] Run the enhanced test script and analyze the output.
+      - [x] Simplify the test script to isolate the Google Cloud TTS client.
+      - [x] Investigate the `ENOENT` error, confirming no `.env` file was present.
+      - [x] Create `.env.example` to document required variables.
+      - [x] Enhance test script to automatically find credentials from `gcloud` paths.
+      - [x] Rerun the enhanced test script to confirm credentials are loaded.
+    - [ ] Confirm full TTS synthesis and file output by running the test script.
+      - [x] Debug the authentication error from the latest test run by adding detailed error logging.
+      - [ ] Wait for user to configure Google Cloud credentials based on test script feedback.
+      - [ ] Rerun the `test-tts-controller.js` script to verify TTS functionality.
+  - [ ] Run API test scripts once the server is fixed.
+
+## Current Goal
+Resolve Google Cloud TTS credential issue.

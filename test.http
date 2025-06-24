@@ -1,0 +1,105 @@
+@baseUrl = http://localhost:5000/api
+@contentType = application/json
+
+### Register a new user
+POST {{baseUrl}}/auth/register
+Content-Type: {{contentType}}
+
+{
+  "username": "testuser",
+  "email": "test@example.com",
+  "password": "password123"
+}
+
+### Login user
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "test@example.com",
+  "password": "password123"
+}
+
+### Get current user profile
+@authToken = {{login.response.body.token}}
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{authToken}}
+
+### Get available TTS voices
+GET {{baseUrl}}/tts/voices
+Authorization: Bearer {{authToken}}
+
+### Logout user
+GET {{baseUrl}}/auth/logout
+Authorization: Bearer {{authToken}}
+
+### Get all users
+GET {{baseUrl}}/auth/users
+Authorization: Bearer {{authToken}}
+
+### Convert text to speech
+# @name tts
+POST {{baseUrl}}/tts/text-to-speech
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "text": "Hello, this is a test of the text-to-speech API.",
+  "voice": "en-US-Wavenet-D",
+  "language": "en-US",
+  "speed": 1.0
+}
+
+### Get TTS history
+GET {{baseUrl}}/tts/history
+Authorization: Bearer {{authToken}}
+
+### Get audio file by ID
+GET {{baseUrl}}/tts/audio/{{tts.response.body.audioFile.id}}
+Authorization: Bearer {{authToken}}
+
+### Paraphrase text
+POST {{baseUrl}}/ai/paraphrase
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "text": "The quick brown fox jumps over the lazy dog.",
+  "tone": "formal"
+}
+
+### Summarize text
+POST {{baseUrl}}/ai/summarize
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "text": "The Industrial Revolution and its consequences have been a disaster for the human race. They have greatly increased the life-expectancy of those of us who live in 'advanced' countries, but they have destabilized society, have made life unfulfilling, have subjected human beings to indignities, have led to widespread psychological suffering, and have inflicted severe damage on the natural world.",
+  "format": "paragraph",
+  "length": 3
+}
+
+### Extract key points
+POST {{baseUrl}}/ai/key-points
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "text": "The Industrial Revolution and its consequences have been a disaster for the human race. They have greatly increased the life-expectancy of those of us who live in 'advanced' countries, but they have destabilized society, have made life unfulfilling, have subjected human beings to indignities, have led to widespread psychological suffering, and have inflicted severe damage on the natural world.",
+  "count": 3
+}
+
+### Change text tone
+POST {{baseUrl}}/ai/change-tone
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "text": "I need this done by tomorrow.",
+  "tone": "polite"
+}
+
+### Get AI operation history
+GET {{baseUrl}}/ai/history
+Authorization: Bearer {{authToken}}
