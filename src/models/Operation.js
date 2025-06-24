@@ -8,7 +8,7 @@ const Operation = sequelize.define('Operation', {
     autoIncrement: true
   },
   type: {
-    type: DataTypes.ENUM('text-to-speech', 'pdf-to-speech', 'paraphrase', 'summarize'),
+    type: DataTypes.ENUM('text-to-speech', 'pdf-to-speech', 'paraphrase', 'summarize', 'key-points', 'change-tone', 'document-paraphrase', 'document-summarize', 'document-key-points', 'document-change-tone'),
     allowNull: false
   },
   input: {

@@ -1,5 +1,7 @@
+const PDFDocument = require('pdfkit');
 const pdf = require('pdf-parse');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsp = require('fs').promises;
 const { ApiError } = require('../middleware/errorHandler');
 
 /**
@@ -67,8 +69,35 @@ const getPdfMetadata = async (filePath) => {
   }
 };
 
+/**
+ * Generates a PDF from text
+ * @param {string} text - Text to generate PDF from
+ * @param {string} outputPath - Path to save the generated PDF
+ * @returns {Promise<string>} - Path to the generated PDF
+ */
+const generatePdf = async (text, outputPath) => {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument();
+    const stream = fs.createWriteStream(outputPath);
+    
+    doc.pipe(stream);
+    doc.fontSize(12);
+    doc.text(text, {
+      align: 'left',
+      width: 500,
+      indent: 30
+    });
+    
+    doc.end();
+    
+    stream.on('finish', () => resolve(outputPath));
+    stream.on('error', reject);
+  });
+}
+
 module.exports = {
   extractTextFromPdf,
   extractTextFromPdfBuffer,
-  getPdfMetadata
+  getPdfMetadata,
+  generatePdf
 };

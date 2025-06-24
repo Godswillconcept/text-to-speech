@@ -1,25 +1,8 @@
 const multer = require('multer');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
 const { ApiError } = require('./errorHandler');
 
-// Configure storage for uploaded files
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '..', '..', 'uploads');
-    // Ensure upload directory exists
-    const fs = require('fs');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${uuidv4()}`;
-    const ext = path.extname(file.originalname);
-    cb(null, `upload-${uniqueSuffix}${ext}`);
-  }
-});
+// Use memory storage to get file buffer
+const storage = multer.memoryStorage();
 
 // File filter to only allow specific file types
 const fileFilter = (req, file, cb) => {

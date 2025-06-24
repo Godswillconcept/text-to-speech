@@ -93,6 +93,9 @@ This outline provides a solid foundation for building a full-stack text-to-speec
 - A manual test script (`test-ai-manual.js`) has been created for the AI endpoints.
 - A database connection test script (`test-db.js`) has been created to isolate potential database issues.
 
+
+
+
 ## Task List
 - [x] Initialize npm project.
 - [x] Install core dependencies (`express`, `sequelize`, `mysql2`, `jsonwebtoken`, `bcryptjs`, `express-validator`, `express-session`, `connect-flash`, `cors`, `dotenv`, `multer`).

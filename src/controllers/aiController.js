@@ -1,6 +1,10 @@
+const path = require('path');
+const fs = require('fs').promises;
 const Operation = require('../models/Operation');
 const { paraphraseText, summarizeText, extractKeyPoints, changeTone } = require('../services/aiService');
+const { saveFile, extractText, cleanup, getUploadDir, getDocumentDirs } = require('../services/documentService');
 const { ApiError } = require('../middleware/errorHandler');
+const pdfService = require('../services/pdfService');
 
 /**
  * @desc    Paraphrase text
@@ -287,4 +291,132 @@ exports.getHistory = async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+};
+
+
+/**
+ * Process document and apply the specified AI operation
+ * @private
+ */
+const processDocumentWithOperation = async (req, res, next, operationType, processFn) => {
+  try {
+    if (!req.file) {
+      throw new ApiError(400, 'No file uploaded');
+    }
+
+    const { originalname, mimetype, size, buffer } = req.file;
+    
+    // Save the uploaded file
+    // Create file info object with the buffer from multer
+    const fileInfo = {
+      originalname,
+      mimetype,
+      size,
+      buffer // Include the file buffer from multer
+    };
+
+    // Save file to appropriate directory
+    const savedFile = await saveFile(fileInfo);
+    
+    try {
+      // Extract text from the document
+      const extractedText = await extractText({
+        path: savedFile.path,
+        mimetype: fileInfo.mimetype
+      });
+      
+      if (!extractedText) {
+        throw new ApiError(400, 'Could not extract text from the document');
+      }
+
+      // Process the text with the provided operation function
+      const result = await processFn(extractedText, req.body);
+      
+      // Convert array output to string if needed (e.g., for key points)
+      const outputText = Array.isArray(result) ? result.join('\n\n') : result;
+
+      // Generate PDF version
+      const pdfFileName = `${path.basename(savedFile.path, path.extname(savedFile.path))}.pdf`;
+      const pdfPath = path.join('outputs', pdfFileName);
+      await fs.mkdir('outputs', { recursive: true });
+      await pdfService.generatePdf(outputText, pdfPath);
+
+      // Create operation record
+      const operationRecord = await Operation.create({
+        type: `document-${operationType}`,
+        input: extractedText,
+        output: outputText, // Use the string version of the result
+        status: 'completed',
+        userId: req.user.id,
+        metadata: {
+          originalFileName: originalname,
+          fileType: fileInfo.mimetype,
+          fileSize: size,
+          pdfOutputPath: pdfPath,
+          ...req.body // Include any additional metadata from the request
+        }
+      });
+
+      // Return results
+      res.json({
+        success: true,
+        text: result,
+        pdfUrl: `/outputs/${pdfFileName}`,
+        operationId: operationRecord.id
+      });
+
+    } finally {
+      // Clean up the uploaded file
+      await cleanup(savedFile.path);
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Paraphrase document text
+ * @route   POST /api/ai/doc/paraphrase
+ * @access  Private
+ */
+exports.paraphraseDocument = async (req, res, next) => {
+  await processDocumentWithOperation(req, res, next, 'paraphrase', 
+    async (text, options) => await paraphraseText(text, options)
+  );
+};
+
+/**
+ * @desc    Summarize document text
+ * @route   POST /api/ai/doc/summarize
+ * @access  Private
+ */
+exports.summarizeDocument = async (req, res, next) => {
+  await processDocumentWithOperation(req, res, next, 'summarize', 
+    async (text, options) => await summarizeText(text, options)
+  );
+};
+
+/**
+ * @desc    Extract key points from document
+ * @route   POST /api/ai/doc/key-points
+ * @access  Private
+ */
+exports.extractKeyPointsFromDocument = async (req, res, next) => {
+  await processDocumentWithOperation(req, res, next, 'key-points', 
+    async (text, options) => await extractKeyPoints(text, options)
+  );
+};
+
+/**
+ * @desc    Change tone of document text
+ * @route   POST /api/ai/doc/change-tone
+ * @access  Private
+ */
+exports.changeToneOfDocument = async (req, res, next) => {
+  await processDocumentWithOperation(req, res, next, 'change-tone', 
+    async (text, options) => {
+      const { tone = 'neutral' } = options || {};
+      return await changeTone(text, tone);
+    }
+  );
 };

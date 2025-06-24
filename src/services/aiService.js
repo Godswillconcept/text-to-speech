@@ -70,7 +70,7 @@ Only respond with the paraphrased text, nothing else.\n\nText: "${text}"`;
  * @param {string} text - The text to summarize
  * @param {Object} options - Options for summarization
  * @param {string} [options.format='paragraph'] - The format of the summary ('paragraph', 'bullet', 'concise')
- * @param {number} [options.length=3] - The desired length of the summary (1-5, where 1 is shortest)
+ * @param {number} [options.length=3] - The desired length of the summary (1-6, where 1 is shortest)
  * @returns {Promise<string>} - The summarized text
  */
 const summarizeText = async (text, { format = 'paragraph', length = 3 } = {}) => {
@@ -79,10 +79,11 @@ const summarizeText = async (text, { format = 'paragraph', length = 3 } = {}) =>
     2: 'a short paragraph',
     3: 'a medium-length summary',
     4: 'a detailed summary',
-    5: 'a very detailed summary'
+    5: 'a very detailed summary',
+    6: 'a summary of the most important paragraphs'
   };
 
-  const prompt = `Please provide ${lengthMap[Math.min(5, Math.max(1, length))]} of the following text in ${format} format. 
+  const prompt = `Please provide ${lengthMap[Math.min(6, Math.max(1, length))]} of the following text in ${format} format. 
 Only respond with the summary, nothing else.\n\nText: "${text}"`;
   
   return await generateText(prompt, {

@@ -23,8 +23,12 @@ app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
 
-const uploadsPath = path.join(__dirname, "uploads");
+const uploadsPath = path.join(__dirname, "..", "uploads");
 app.use("/uploads", express.static(uploadsPath));
+
+const outputPath = path.join(__dirname, "..", "output");
+app.use("/output", express.static(outputPath));
+
 
 // Session configuration
 app.use(

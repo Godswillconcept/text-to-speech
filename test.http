@@ -103,3 +103,45 @@ Authorization: Bearer {{authToken}}
 ### Get AI operation history
 GET {{baseUrl}}/ai/history
 Authorization: Bearer {{authToken}}
+
+
+### Paraphrase document
+POST {{baseUrl}}/ai/doc/paraphrase
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "file": "<file path>",
+  "tone": "formal"
+}
+
+### Summarize document
+POST {{baseUrl}}/ai/doc/summarize
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "file": "<file path>",
+  "format": "paragraph",
+  "length": 3
+}
+
+### Extract key points from document
+POST {{baseUrl}}/ai/doc/key-points
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "file": "<file path>",
+  "count": 3
+}
+
+### Change tone of document
+POST {{baseUrl}}/ai/doc/change-tone
+Content-Type: {{contentType}}
+Authorization: Bearer {{authToken}}
+
+{
+  "file": "<file path>",
+  "tone": "polite"
+}
