@@ -95,7 +95,7 @@ const Footer = () => {
           ))}
         </div>
         <p className="mt-10 text-center text-xs leading-5 text-gray-500">
-          &copy; {currentYear} SubsSum. All rights reserved.
+          &copy; {currentYear} SummaVoice. All rights reserved.
         </p>
         <p className="mt-2 text-center text-xs text-gray-400">
           Made with ❤️ for better financial services
