@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../hooks/useAuth';
 import { UserPlusIcon } from '@heroicons/react/20/solid';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
-    name: '',
     email: '',
+    username: '',
     password: '',
     confirmPassword: ''
   });
   const [formError, setFormError] = useState('');
   const { register, isLoading, error: authError } = useAuth();
-  const { name, email, password, confirmPassword } = formData;
+  const { email, username, password, confirmPassword } = formData;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -39,7 +39,7 @@ export default function RegisterPage() {
     setFormError('');
     
     // Call the register function from AuthContext
-    const result = await register({ name, email, password });
+    const result = await register({ email, username, password });
     
     // Note: The AuthContext will handle the navigation on success
     if (!result.success) {
@@ -81,23 +81,6 @@ export default function RegisterPage() {
 
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Full Name
-              </label>
-              <div className="mt-1">
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={handleChange}
-                  className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-amber-500 sm:text-sm"
-                />
-              </div>
-            </div>
-
-            <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 Email address
               </label>
@@ -109,6 +92,24 @@ export default function RegisterPage() {
                   autoComplete="email"
                   required
                   value={email}
+                  onChange={handleChange}
+                  className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-amber-500 sm:text-sm"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                Username
+              </label>
+              <div className="mt-1">
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  value={username}
                   onChange={handleChange}
                   className="block w-full appearance-none rounded-md border border-gray-300 px-3 py-2 placeholder-gray-400 shadow-sm focus:border-amber-500 focus:outline-none focus:ring-amber-500 sm:text-sm"
                 />

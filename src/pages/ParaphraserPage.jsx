@@ -1,12 +1,13 @@
-import { useState, Fragment } from 'react';
-import { Tab } from '@headlessui/react';
+/* eslint-disable no-unused-vars */
+import { useState, Fragment, useCallback } from 'react';
+import { Tab, Listbox, Transition } from '@headlessui/react';
 import { motion } from 'framer-motion';
-import { DocumentArrowUpIcon, LanguageIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import { DocumentArrowUpIcon, LanguageIcon, ArrowPathIcon, CheckIcon, ChevronUpDownIcon } from '@heroicons/react/24/outline';
 
 import { useApi } from '../hooks/useApi.js';
 import { paraphraseText, paraphrasePdf } from '../utils/api.js';
 import TextInput from '../components/TextInput';
-import PdfUploader from '../components/PdfUploader';
+import DocumentUploader from '../components/DocumentUploader';
 
 // A helper for dynamic class names with Headless UI
 function classNames(...classes) {
@@ -17,33 +18,90 @@ const ParaphraserPage = () => {
   // State for the inputs
   const [inputText, setInputText] = useState('');
   const [file, setFile] = useState(null);
-  const [tone, setTone] = useState('standard');
   const [outputText, setOutputText] = useState('');
+  const [tone, setTone] = useState('neutral'); // Default to neutral to match backend
   
   // Two instances of useApi for our two different endpoints
-  const { isLoading: isTextLoading, error: textError, request: paraphraseFromText, clearError: clearTextError } = useApi(paraphraseText);
-  const { isLoading: isFileLoading, error: fileError, request: paraphraseFromFile, clearError: clearFileError } = useApi(paraphrasePdf);
+  const { 
+    isLoading: isTextLoading, 
+    error: textError, 
+    request: paraphraseFromText, 
+    clearError: clearTextError 
+  } = useApi(paraphraseText);
+  
+  const { 
+    isLoading: isFileLoading, 
+    error: fileError, 
+    request: paraphraseFromFile, 
+    clearError: clearFileError 
+  } = useApi(paraphrasePdf);
 
   const isLoading = isTextLoading || isFileLoading;
   const error = textError || fileError;
 
   const handleParaphrase = async (tabIndex) => {
     setOutputText(''); // Clear previous results
-    let result;
-
-    if (tabIndex === 0) { // Paraphrase from Text
-      if (!inputText.trim()) return;
-      result = await paraphraseFromText({ text: inputText, tone });
-    } else { // Paraphrase from PDF
-      if (!file) return;
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('tone', tone); // Sending tone along with the file
-      result = await paraphraseFromFile(formData);
-    }
+    clearTextError();
+    clearFileError();
     
-    if (result && result.paraphrasedText) {
-      setOutputText(result.paraphrasedText);
+    try {
+      let result;
+
+      if (tabIndex === 0) { // Paraphrase from Text
+        if (!inputText.trim()) {
+          clearTextError();
+          return;
+        }
+        
+        result = await paraphraseFromText({ 
+          text: inputText, 
+          tone: tone.toLowerCase()
+        });
+        
+        // Handle the response format from the backend
+        if (result && result.text) {
+          setOutputText(result.text);
+        } else if (result && result.paraphrasedText) {
+          setOutputText(result.paraphrasedText);
+        } else if (result && result.result) {
+          setOutputText(result.result);
+        } else {
+          console.error('Unexpected response format:', result);
+          throw new Error('Received an unexpected response format from the server');
+        }
+      } else { // Paraphrase from Document
+        if (!file) {
+          clearFileError();
+          return;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('tone', tone.toLowerCase());
+        formData.append('complexity', 'maintain');
+        
+        result = await paraphraseFromFile(formData);
+        
+        // Handle the response format from the backend
+        if (result && result.text) {
+          setOutputText(result.text);
+        } else if (result && result.paraphrasedText) {
+          setOutputText(result.paraphrasedText);
+        } else if (result && result.result) {
+          setOutputText(result.result);
+        } else {
+          console.error('Unexpected document response format:', result);
+          throw new Error('Received an unexpected response format for document processing');
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleParaphrase:', error);
+      // The error will be handled by the useApi hook and available in textError or fileError
+      if (tabIndex === 0) {
+        clearTextError();
+      } else {
+        clearFileError();
+      }
     }
   };
   
@@ -59,11 +117,16 @@ const ParaphraserPage = () => {
 
   const tones = [
     { id: 'standard', name: 'Standard' },
+    { id: 'neutral', name: 'Neutral' },
     { id: 'formal', name: 'Formal' },
     { id: 'casual', name: 'Casual' },
     { id: 'friendly', name: 'Friendly' },
     { id: 'professional', name: 'Professional' },
+    { id: 'academic', name: 'Academic' },
+    { id: 'business', name: 'Business' },
   ];
+  
+  // Tone options for the select dropdown
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -112,7 +175,13 @@ const ParaphraserPage = () => {
 
                   <Tab.Panel className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-black ring-opacity-5">
                     {/* View for "From Document" */}
-                    <PdfUploader file={file} onFileChange={handleFileChange} />
+                    <DocumentUploader 
+                      file={file} 
+                      onFileChange={handleFileChange}
+                      acceptedTypes={['.pdf', '.doc', '.docx', '.txt', '.rtf', '.ppt', '.pptx']}
+                      acceptedMimeTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'application/rtf', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation']}
+                      label="Upload Document"
+                    />
                   </Tab.Panel>
                 </motion.div>
               </AnimatePresence>
@@ -121,10 +190,75 @@ const ParaphraserPage = () => {
             {/* Shared Controls and Output */}
             <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
               <div className="md:col-span-1">
-                <label htmlFor="tone" className="block text-sm font-medium text-gray-700">Tone</label>
-                <select id="tone" value={tone} onChange={e => setTone(e.target.value)} className="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm">
-                  {tones.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
+                <Listbox value={tone} onChange={setTone} disabled={isLoading}>
+                  {({ open }) => (
+                    <div className="w-full">
+                      <Listbox.Label className="block text-sm font-medium text-gray-700 mb-1">
+                        Tone
+                      </Listbox.Label>
+                      <div className="relative mt-1">
+                        <Listbox.Button 
+                          className={classNames(
+                            'relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm',
+                            isLoading ? 'opacity-75 cursor-not-allowed' : 'hover:border-indigo-300',
+                            'transition-all duration-200 ease-in-out'
+                          )}
+                          aria-describedby="tone-description"
+                        >
+                          <span className="block truncate">
+                            {tones.find(t => t.id === tone)?.name || 'Select tone'}
+                          </span>
+                          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                            <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                          </span>
+                        </Listbox.Button>
+                        <Transition
+                          show={open}
+                          as={Fragment}
+                          leave="transition ease-in duration-100"
+                          leaveFrom="opacity-100"
+                          leaveTo="opacity-0"
+                        >
+                          <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+                            {tones.map((toneOption) => (
+                              <Listbox.Option
+                                key={toneOption.id}
+                                className={({ active }) =>
+                                  classNames(
+                                    active ? 'bg-indigo-600 text-white' : 'text-gray-900',
+                                    'relative cursor-default select-none py-2 pl-3 pr-9'
+                                  )
+                                }
+                                value={toneOption.id}
+                              >
+                                {({ selected, active }) => (
+                                  <>
+                                    <span className={classNames(selected ? 'font-semibold' : 'font-normal', 'block truncate')}>
+                                      {toneOption.name}
+                                    </span>
+                                    {selected ? (
+                                      <span
+                                        className={classNames(
+                                          active ? 'text-white' : 'text-indigo-600',
+                                          'absolute inset-y-0 right-0 flex items-center pr-4'
+                                        )}
+                                      >
+                                        <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                                      </span>
+                                    ) : null}
+                                  </>
+                                )}
+                              </Listbox.Option>
+                            ))}
+                          </Listbox.Options>
+                        </Transition>
+                      </div>
+                    </div>
+                  )}
+                </Listbox>
+                <p className="mt-1 text-xs text-gray-500" id="tone-description">
+                  Select the tone for paraphrasing
+                </p>
               </div>
               <div className="md:col-span-2 self-end flex justify-end">
                 <button type="button" onClick={() => handleParaphrase(selectedIndex)} disabled={isLoading} className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed">

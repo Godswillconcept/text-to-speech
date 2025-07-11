@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import { LockClosedIcon } from '@heroicons/react/20/solid';
 
 export default function LoginPage() {
@@ -8,7 +8,8 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const { login, isLoading, error: authError } = useAuth();
-
+  const navigate = useNavigate();
+  const location = useLocation();
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -20,13 +21,22 @@ export default function LoginPage() {
 
     setFormError('');
     
-    // Call the login function from AuthContext
-    const result = await login({ email, password });
-    
-    // Note: The AuthContext will handle the navigation on success
-    if (!result.success) {
-      // Error is already set in the AuthContext, no need to set it again
-      console.error('Login failed:', result.error);
+    try {
+      // Call the login function from AuthContext
+      const result = await login({ email, password });
+      
+      if (result.success) {
+        // Get the return URL from location state or default to '/'
+        const returnUrl = location.state?.from?.pathname || '/';
+        console.log('Login successful, redirecting to:', returnUrl);
+        navigate(returnUrl, { replace: true });
+      } else {
+        setFormError(result.error || 'Login failed. Please try again.');
+        console.error('Login failed:', result.error);
+      }
+    } catch (error) {
+      setFormError('An unexpected error occurred. Please try again.');
+      console.error('Login error:', error);
     }
   };
 

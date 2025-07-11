@@ -5,7 +5,8 @@ import {
   SpeakerWaveIcon, 
   SpeakerXMarkIcon,
   ForwardIcon,
-  BackwardIcon
+  BackwardIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/solid';
 
 const formatTime = (timeInSeconds) => {
@@ -162,7 +163,7 @@ const AudioPlayer = ({
 
   return (
     <div className={`flex flex-col w-full ${className}`}>
-      <div className="flex items-center space-x-2 sm:space-x-4 w-full">
+      <div className="flex items-center space-x-2 sm:space-x-3 w-full">
         {onPrevious && (
           <button
             onClick={onPrevious}
@@ -197,6 +198,20 @@ const AudioPlayer = ({
 
         <div className="text-xs sm:text-sm text-gray-600 w-16 sm:w-20 text-center">
           {formatTime(currentTime)} / {formatTime(duration)}
+        </div>
+        
+        {/* Download Button */}
+        <div className="ml-auto">
+          <a
+            href={audioUrl}
+            download
+            className="p-1.5 sm:p-2 text-gray-600 hover:text-indigo-600 focus:outline-none transition-colors duration-200"
+            title="Download audio"
+            aria-label="Download audio"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ArrowDownTrayIcon className="h-5 w-5" />
+          </a>
         </div>
 
         <div 

@@ -1,9 +1,34 @@
 import { Fragment } from 'react';
 import { Menu, Transition } from '@headlessui/react';
-import { BellIcon } from '@heroicons/react/24/outline';
+import { useNavigate, Link } from 'react-router-dom';
+import { 
+  BellIcon,
+  UserCircleIcon,
+  Cog6ToothIcon,
+  ArrowLeftOnRectangleIcon
+} from '@heroicons/react/24/outline';
 import { Bars3Icon } from '@heroicons/react/24/solid';
+import { useAuth } from '../hooks/useAuth.js';
 
 const Header = ({ setSidebarOpen }) => {
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const getUserInitials = () => {
+    if (!user?.username) return '?';
+    return user.username
+      .split(' ')
+      .map(n => n[0])
+      .join('')
+      .toUpperCase()
+      .substring(0, 2);
+  };
+
+  const handleSignOut = (e) => {
+    e.preventDefault();
+    logout();
+    navigate('/login');
+  };
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
       {/* Mobile menu button */}
@@ -38,11 +63,13 @@ const Header = ({ setSidebarOpen }) => {
             <Menu.Button className="flex items-center gap-x-2 p-1.5 -m-1.5 rounded-full hover:bg-gray-100 transition-colors">
               <span className="sr-only">Open user menu</span>
               <div className="h-8 w-8 rounded-full bg-gradient-to-r from-amber-500 to-secondary-500 flex items-center justify-center shadow-sm">
-                <span className="text-sm font-medium text-white">LW</span>
+                <span className="text-sm font-medium text-white">
+                  {isAuthenticated && user ? getUserInitials() : '?'}
+                </span>
               </div>
               <span className="hidden lg:flex lg:items-center">
                 <span className="ml-1 text-sm font-semibold leading-6 text-amber" aria-hidden="true">
-                  Lawal Wahab
+                  {isAuthenticated && user ? user.username : 'Guest'}
                 </span>
               </span>
             </Menu.Button>
@@ -59,42 +86,42 @@ const Header = ({ setSidebarOpen }) => {
                 <div className="p-1">
                   <Menu.Item>
                     {({ active }) => (
-                      <a
-                        href="#"
+                      <Link
+                        to="/profile"
                         className={`${active ? 'bg-gray-100' : ''
                           } flex items-center gap-2 px-4 py-2.5 text-sm text-amber rounded-md transition-colors`}
                       >
                         <UserCircleIcon className="h-5 w-5 text-gray-400" />
                         Your profile
-                      </a>
+                      </Link>
                     )}
                   </Menu.Item>
                 </div>
                 <div className="p-1">
                   <Menu.Item>
                     {({ active }) => (
-                      <a
-                        href="#"
+                      <Link
+                        to="/settings"
                         className={`${active ? 'bg-gray-100' : ''
                           } flex items-center gap-2 px-4 py-2.5 text-sm text-amber rounded-md transition-colors`}
                       >
                         <Cog6ToothIcon className="h-5 w-5 text-gray-400" />
                         Settings
-                      </a>
+                      </Link>
                     )}
                   </Menu.Item>
                 </div>
                 <div className="p-1">
                   <Menu.Item>
                     {({ active }) => (
-                      <a
-                        href="#"
+                      <button
+                        onClick={handleSignOut}
                         className={`${active ? 'bg-gray-100' : ''
-                          } flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 rounded-md transition-colors`}
+                          } w-full text-left flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 rounded-md transition-colors`}
                       >
                         <ArrowLeftOnRectangleIcon className="h-5 w-5 text-red-400" />
                         Sign out
-                      </a>
+                      </button>
                     )}
                   </Menu.Item>
                 </div>

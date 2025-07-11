@@ -1,4 +1,15 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+// Base URL for API requests - Don't include /api here as it's added in the endpoints
+// Ensure the base URL doesn't end with a trailing slash
+const getApiBaseUrl = () => {
+  let baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+  // Remove any trailing slashes
+  while (baseUrl.endsWith('/')) {
+    baseUrl = baseUrl.slice(0, -1);
+  }
+  return baseUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 import { API_ENDPOINTS } from './constants';
 
 // Authentication API functions
@@ -42,14 +53,51 @@ const handleResponse = async (response) => {
 };
 
 // Function for TextToSpeech.jsx
-export const textToSpeech = async (options) => { // Expects { text, voice, rate, pitch }
-  const response = await fetch(`${API_BASE_URL}/text-to-speech`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(options),
-  });
-  await handleResponse(response);
-  return response.blob();
+export const textToSpeech = async (options) => { // Expects { text, voice, rate, pitch, format, codec, base64 }
+  // Clean up the base URL
+  let baseUrl = API_BASE_URL;
+  while (baseUrl.endsWith('/')) {
+    baseUrl = baseUrl.slice(0, -1);
+  }
+  
+  // Clean up the endpoint
+  let endpoint = 'api/tts/text-to-speech';
+  while (endpoint.startsWith('/')) {
+    endpoint = endpoint.substring(1);
+  }
+  
+  // Construct the final URL
+  const url = `${baseUrl}/${endpoint}`;
+  console.log('TTS Request URL:', url); // Debug log
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        text: options.text,
+        voice: options.voice,
+        speed: options.rate || options.speed,
+        pitch: options.pitch,
+        format: options.format || 'mp3',
+        codec: options.codec || 'libmp3lame',
+        base64: options.base64 || false
+      }),
+    });
+    
+    const data = await handleResponse(response);
+    const result = await data.json();
+    console.log('TTS Response:', result);
+    
+    return result.audioUrl;
+  } catch (error) {
+    console.error('TTS Error:', error);
+    throw error;
+  }
 };
 
 // Function for PDF to speech conversion
@@ -92,31 +140,116 @@ export const pdfToSpeech = async (formData, onProgress) => {
 
 // Function for ParaphraserPage.jsx
 export const paraphraseText = async (options) => { // Expects { text, tone }
-  const response = await fetch(`${API_BASE_URL}/paraphrase`, {
+  const response = await fetch(`${API_BASE_URL}/api/ai/paraphrase`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(options),
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      text: options.text,
+      tone: options.tone || 'neutral',
+      complexity: 'maintain' // Default complexity
+    }),
   });
-  await handleResponse(response);
-  return response.json();
+  
+  const data = await handleResponse(response);
+  const result = await data.json();
+  return result;
 };
 
 // Function for text summarization
-export const summarizeText = async (options) => { // Expects { text }
-  const response = await fetch(`${API_BASE_URL}/summarize`, {
+export const summarizeText = async (options) => { // Expects { text, format, length }
+  const response = await fetch(`${API_BASE_URL}/api/ai/summarize`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(options),
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      text: options.text,
+      format: options.format || 'paragraph',
+      length: options.length || 3
+    }),
   });
-  await handleResponse(response);
-  return response.json();
+  
+  const data = await handleResponse(response);
+  const result = await data.json();
+  return { summary: result.result }; // Map the backend response to expected frontend format
 };
 
-// Function to get all operations
-export const getOperations = async () => {
-  const response = await fetch(`${API_BASE_URL}/operations`);
-  await handleResponse(response);
-  return response.json();
+/**
+ * Fetches operations with pagination and filtering
+ * @param {Object} options - Options for fetching operations
+ * @param {number} options.page - Page number (1-based)
+ * @param {number} options.limit - Number of items per page
+ * @param {string} options.type - Filter by operation type
+ * @param {string} options.search - Search query to filter operations
+ * @returns {Promise<{data: Array, pagination: Object}>} - Operations and pagination info
+ */
+export const getOperations = async ({ page = 1, limit = 10, type, search } = {}) => {
+  try {
+    // Build query parameters
+    const params = new URLSearchParams();
+    params.append('page', page);
+    params.append('limit', limit);
+    if (type && type !== 'all') {
+      params.append('type', type);
+    }
+    if (search) {
+      params.append('search', search);
+    }
+
+    // Construct the URL with the correct API path
+    const basePath = API_BASE_URL.endsWith('/') ? API_BASE_URL : `${API_BASE_URL}/`;
+    const endpoint = 'api/operations';
+    const queryString = params.toString();
+    // Ensure we don't have double slashes between basePath and endpoint
+    const url = `${basePath}${endpoint}${queryString ? `?${queryString}` : ''}`;
+    console.log('Fetching operations from:', url);
+    
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      console.warn('No authentication token found');
+      // Redirect to login or handle missing token appropriately
+      window.location.href = '/login';
+      return;
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` })
+      },
+      credentials: 'include',
+      mode: 'cors'
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('API Error Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        error: errorText
+      });
+      throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    console.log('Operations API Response:', data);
+    return data;
+  } catch (error) {
+    console.error('Error in getOperations:', {
+      error,
+      message: error.message,
+      stack: error.stack
+    });
+    throw error; // Re-throw to be handled by the caller
+  }
 };
 
 // Function to delete an operation
@@ -131,29 +264,53 @@ export const deleteOperation = async (id) => {
 /**
  * Summarizes the text content of an uploaded PDF file.
  * @param {FormData} formData - The form data containing the PDF file and any options.
- * @returns {Promise<object>} The summary result.
+ * @returns {Promise<{summary: string}>} The summary result.
  */
 export const summarizePdf = async (formData) => {
-  const response = await fetch(`${API_BASE_URL}${API_ENDPOINTS.SUMMARIZE_PDF}`, {
-    method: 'POST',
-    body: formData,
-  });
-  await handleResponse(response);
-  return response.json();
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/ai/doc/summarize`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+      },
+      credentials: 'include',
+      body: formData,
+    });
+    
+    const data = await handleResponse(response);
+    const result = await data.json();
+    
+    // The backend returns the summary in the 'text' field for document operations
+    if (result && typeof result.text === 'string') {
+      return { summary: result.text };
+    }
+    
+    // Handle case where the response format is unexpected
+    throw new Error('Unexpected response format from server');
+  } catch (error) {
+    console.error('Error in summarizePdf:', error);
+    throw error; // Re-throw to allow error handling in the component
+  }
 };
 
 /**
- * Paraphrases the text content of an uploaded PDF file.
- * @param {FormData} formData - The form data containing the PDF file.
+ * Paraphrases the text content of an uploaded document.
+ * @param {FormData} formData - The form data containing the document file and options.
  * @returns {Promise<object>} The paraphrased text result.
  */
 export const paraphrasePdf = async (formData) => {
-  const response = await fetch(`${API_BASE_URL}/paraphrase-pdf`, {
+  const response = await fetch(`${API_BASE_URL}/api/ai/doc/paraphrase`, {
     method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+    },
+    credentials: 'include',
     body: formData,
   });
-  await handleResponse(response);
-  return response.json();
+  
+  const data = await handleResponse(response);
+  const result = await data.json();
+  return result;
 };
 
 /**
@@ -188,28 +345,53 @@ export const getKeyPointsFromPdf = async (formData) => {
 /**
  * Changes the tone of a given text.
  * @param {object} options - Contains the text and desired tone. e.g., { text, tone }
- * @returns {Promise<{tonedText: string}>} An object containing the text with the new tone.
+ * @returns {Promise<{result: string}>} An object containing the text with the new tone.
  */
 export const changeToneOfText = async (options) => {
-  const response = await fetch(`${API_BASE_URL}/change-tone`, {
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/ai/change-tone`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(options),
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      text: options.text,
+      tone: options.tone
+    }),
   });
-  await handleResponse(response);
-  return response.json();
+  
+  const data = await handleResponse(response);
+  const result = await data.json();
+  return { tonedText: result.result };
 };
 
 /**
- * Changes the tone of an uploaded PDF file's content.
- * @param {FormData} formData - The form data containing the PDF file and tone.
- * @returns {Promise<{tonedText: string}>} An object containing the text with the new tone.
+ * Changes the tone of an uploaded document's content.
+ * @param {FormData} formData - The form data containing the document file and tone.
+ * @returns {Promise<{result: string}>} An object containing the text with the new tone.
  */
 export const changeToneOfPdf = async (formData) => {
-  const response = await fetch(`${API_BASE_URL}/change-tone-pdf`, {
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/ai/doc/change-tone`, {
     method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    },
+    credentials: 'include',
     body: formData,
   });
-  await handleResponse(response);
-  return response.json();
+  
+  const data = await handleResponse(response);
+  const result = await data.json();
+  return { tonedText: result.result };
 };

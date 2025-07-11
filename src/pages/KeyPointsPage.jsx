@@ -6,7 +6,7 @@ import { DocumentArrowUpIcon, LanguageIcon, LightBulbIcon } from '@heroicons/rea
 import { useApi } from '../hooks/useApi.js';
 import { getKeyPointsFromText, getKeyPointsFromPdf } from '../utils/api.js';
 import TextInput from '../components/TextInput';
-import PdfUploader from '../components/PdfUploader';
+import DocumentUploader from '../components/DocumentUploader';
 
 function classNames(...classes) {
   return classes.filter(Boolean).join(' ');
@@ -96,7 +96,7 @@ const KeyPointsPage = () => {
                 />
               </Tab.Panel>
               <Tab.Panel>
-                <PdfUploader
+                <DocumentUploader
                   onFileSelect={setFile}
                   selectedFile={file}
                   onClear={() => {

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { DocumentTextIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { pdfToSpeech } from '../utils/api';
-import PdfUploader from '../components/PdfUploader';
+import DocumentUploader from '../components/DocumentUploader';
 import AudioPlayer from '../components/AudioPlayer';
 
 const PdfToSpeech = () => {
@@ -79,10 +79,13 @@ const PdfToSpeech = () => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Upload PDF
           </label>
-          <PdfUploader 
+          <DocumentUploader 
             file={file} 
-            onFileChange={handleFileChange} 
+            onFileChange={handleFileChange}
             className="w-full"
+            acceptedTypes={['.pdf']}
+            acceptedMimeTypes={['application/pdf']}
+            label="Upload PDF"
           />
         </div>
 

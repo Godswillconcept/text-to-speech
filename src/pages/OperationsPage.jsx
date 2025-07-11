@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment, useCallback } from 'react';
 import { 
   ClockIcon, 
   DocumentTextIcon, 
@@ -12,8 +12,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   SparklesIcon,
-  LightBulbIcon
+  LightBulbIcon,
+  ChevronUpDownIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
+import { Listbox, Transition } from '@headlessui/react';
 import { getOperations, deleteOperation } from '../utils/api';
 
 const operationTypes = [
@@ -36,63 +39,114 @@ const formatDate = (dateString) => {
   return new Date(dateString).toLocaleDateString(undefined, options);
 };
 
+// A helper for dynamic class names with Headless UI
+function classNames(...classes) {
+  return classes.filter(Boolean).join(' ');
+}
+
 const OperationsPage = () => {
   const [operations, setOperations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    hasNextPage: false,
+    hasPreviousPage: false
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const itemsPerPage = 10;
+  // Removed unused state variables
 
+  const fetchOperations = useCallback(async () => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await getOperations({
+        page: pagination.page,
+        limit: pagination.limit,
+        type: selectedType === 'all' ? undefined : selectedType,
+        search: searchQuery || undefined
+      });
+      
+      setOperations(response.data || []);
+      setPagination(prev => ({
+        ...prev,
+        total: response.pagination?.total || 0,
+        totalPages: response.pagination?.totalPages || 1,
+        hasNextPage: response.pagination?.hasNextPage || false,
+        hasPreviousPage: response.pagination?.hasPreviousPage || false
+      }));
+    } catch (err) {
+      setError(err.message || 'Failed to fetch operations');
+      console.error('Error fetching operations:', err);
+      setOperations([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [pagination.page, pagination.limit, selectedType, searchQuery]);
+
+  // Reset to first page when filters change
   useEffect(() => {
-    const fetchOperations = async () => {
-      setIsLoading(true);
-      try {
-        const response = await getOperations({
-          page: currentPage,
-          limit: itemsPerPage,
-          type: selectedType !== 'all' ? selectedType : undefined,
-          search: searchQuery || undefined,
-        });
-        setOperations(response.data);
-        setTotalPages(Math.ceil(response.total / itemsPerPage));
-      } catch (err) {
-        console.error('Error fetching operations:', err);
-        setError('Failed to load operations. Please try again later.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
+    setPagination(prev => ({ ...prev, page: 1 }));
+  }, [selectedType, searchQuery]);
 
+  // Fetch operations when pagination or filters change
+  useEffect(() => {
     fetchOperations();
-  }, [currentPage, selectedType, searchQuery]);
+  }, [pagination.page, pagination.limit, selectedType, searchQuery, fetchOperations]);
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this operation?')) {
       try {
         await deleteOperation(id);
-        setOperations(operations.filter(op => op.id !== id));
+        // Refresh the current page after deletion
+        fetchOperations();
       } catch (err) {
-        console.error('Error deleting operation:', err);
-        setError('Failed to delete operation. Please try again.');
+        setError(err.message || 'Failed to delete operation');
       }
     }
   };
 
   const handleDownload = (operation) => {
     if (operation.type === 'text-to-speech' || operation.type === 'pdf-to-speech') {
-      // For audio files
-      const link = document.createElement('a');
-      link.href = operation.resultUrl;
-      link.download = `audio_${operation.id}.mp3`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // For audio files - use the audioFile URL if available
+      if (operation.audioFile && operation.audioFile.url) {
+        const link = document.createElement('a');
+        // Ensure the URL is absolute
+        const audioUrl = operation.audioFile.url.startsWith('http')
+          ? operation.audioFile.url
+          : `${window.location.origin}${operation.audioFile.url}`;
+        
+        link.href = audioUrl;
+        // Use the original filename if available, otherwise generate one
+        const fileName = operation.audioFile.originalName || `audio_${operation.id}.mp3`;
+        link.download = fileName.endsWith('.mp3') ? fileName : `${fileName}.mp3`;
+        link.target = '_blank'; // Open in new tab for audio preview
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        console.error('No audio file available for download');
+        // Fallback to resultUrl if audioFile is not available (for backward compatibility)
+        if (operation.resultUrl) {
+          const link = document.createElement('a');
+          link.href = operation.resultUrl;
+          link.download = `audio_${operation.id}.mp3`;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          alert('No audio file available for download');
+        }
+      }
     } else {
       // For text results
-      const blob = new Blob([operation.result], { type: 'text/plain' });
+      const content = operation.result || 'No content available';
+      const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -116,12 +170,8 @@ const OperationsPage = () => {
     );
   };
 
-  const filteredOperations = operations.filter(operation => {
-    const matchesSearch = operation.inputText?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                       operation.result?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = selectedType === 'all' || operation.type === selectedType;
-    return matchesSearch && matchesType;
-  });
+  // Use operations directly since filtering is now handled by the API
+  const filteredOperations = operations;
 
   return (
     <div className="py-6">
@@ -153,20 +203,65 @@ const OperationsPage = () => {
                 />
               </div>
               <div className="flex items-center space-x-4">
-                <div className="flex items-center border border-gray-300 rounded-md">
-                  <FunnelIcon className="h-5 w-5 text-gray-400 mr-2" aria-hidden="true" />
-                  <select
-                    className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                    value={selectedType}
-                    onChange={(e) => setSelectedType(e.target.value)}
-                  >
-                    {operationTypes.map((type) => (
-                      <option key={type.id} value={type.id}>
-                        {type.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <Listbox value={selectedType} onChange={setSelectedType}>
+                  {({ open }) => (
+                    <div className="relative w-64">
+                      <Listbox.Button className="relative w-full bg-white border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                        <span className="flex items-center">
+                          <FunnelIcon className="h-5 w-5 text-gray-400 mr-2" aria-hidden="true" />
+                          <span className="block truncate">
+                            {operationTypes.find(t => t.id === selectedType)?.name || 'Filter by type'}
+                          </span>
+                        </span>
+                        <span className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                          <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                        </span>
+                      </Listbox.Button>
+                      <Transition
+                        show={open}
+                        as={Fragment}
+                        leave="transition ease-in duration-100"
+                        leaveFrom="opacity-100"
+                        leaveTo="opacity-0"
+                      >
+                        <Listbox.Options className="absolute z-10 mt-1 w-full bg-white shadow-lg max-h-60 rounded-md py-1 text-base ring-1 ring-black ring-opacity-5 overflow-auto focus:outline-none sm:text-sm">
+                          {operationTypes.map((type) => (
+                            <Listbox.Option
+                              key={type.id}
+                              className={({ active }) =>
+                                classNames(
+                                  active ? 'text-white bg-indigo-600' : 'text-gray-900',
+                                  'cursor-default select-none relative py-2 pl-3 pr-9'
+                                )
+                              }
+                              value={type.id}
+                            >
+                              {({ selected, active }) => (
+                                <>
+                                  <div className="flex items-center">
+                                    <span className={classNames(selected ? 'font-semibold' : 'font-normal', 'block truncate')}>
+                                      {type.name}
+                                    </span>
+                                  </div>
+                                  {selected ? (
+                                    <span
+                                      className={classNames(
+                                        active ? 'text-white' : 'text-indigo-600',
+                                        'absolute inset-y-0 right-0 flex items-center pr-4'
+                                      )}
+                                    >
+                                      <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                                    </span>
+                                  ) : null}
+                                </>
+                              )}
+                            </Listbox.Option>
+                          ))}
+                        </Listbox.Options>
+                      </Transition>
+                    </div>
+                  )}
+                </Listbox>
               </div>
             </div>
           </div>
@@ -217,14 +312,17 @@ const OperationsPage = () => {
                         </div>
                       </div>
                       <div className="flex space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => handleDownload(operation)}
-                          className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-                        >
-                          <ArrowDownTrayIcon className="-ml-0.5 mr-1.5 h-4 w-4" />
-                          Download
-                        </button>
+                        {(operation.type === 'text-to-speech' || operation.type === 'pdf-to-speech') && (
+                          <button
+                            type="button"
+                            onClick={() => handleDownload(operation)}
+                            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            title="Download audio file"
+                          >
+                            <ArrowDownTrayIcon className="-ml-0.5 mr-1.5 h-4 w-4" />
+                            Download
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleDelete(operation.id)}
@@ -239,8 +337,8 @@ const OperationsPage = () => {
                       <div className="sm:flex">
                         <p className="flex items-center text-sm text-gray-500">
                           <span className="truncate">
-                            {operation.inputText?.substring(0, 100)}
-                            {operation.inputText?.length > 100 ? '...' : ''}
+                            {operation.input?.substring(0, 100) || 'No input text available'}
+                            {operation.input?.length > 100 ? '...' : ''}
                           </span>
                         </p>
                       </div>
@@ -251,74 +349,51 @@ const OperationsPage = () => {
             </ul>
           )}
 
-          {totalPages > 1 && (
-            <div className="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-              <div className="flex-1 flex justify-between sm:hidden">
+          {pagination.total > 0 && (
+            <div className="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6">
+              <div className="flex flex-1 justify-between sm:hidden">
                 <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setPagination(prev => ({ ...prev, page: Math.max(prev.page - 1, 1) }))}
+                  disabled={!pagination.hasPreviousPage}
+                  className="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Previous
                 </button>
                 <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                  disabled={!pagination.hasNextPage}
+                  className="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>
               </div>
-              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+              <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm text-gray-700">
-                    Showing <span className="font-medium">{(currentPage - 1) * itemsPerPage + 1}</span> to{' '}
+                    Showing <span className="font-medium">{(pagination.page - 1) * pagination.limit + 1}</span> to{' '}
                     <span className="font-medium">
-                      {Math.min(currentPage * itemsPerPage, operations.length)}
+                      {Math.min(pagination.page * pagination.limit, pagination.total)}
                     </span>{' '}
-                    of <span className="font-medium">{operations.length}</span> results
+                    of <span className="font-medium">{pagination.total}</span> results
                   </p>
                 </div>
                 <div>
-                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                  <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
                     <button
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setPagination(prev => ({ ...prev, page: Math.max(prev.page - 1, 1) }))}
+                      disabled={!pagination.hasPreviousPage}
+                      className="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className="sr-only">Previous</span>
                       <ChevronLeftIcon className="h-5 w-5" aria-hidden="true" />
                     </button>
-                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                      let pageNum;
-                      if (totalPages <= 5) {
-                        pageNum = i + 1;
-                      } else if (currentPage <= 3) {
-                        pageNum = i + 1;
-                      } else if (currentPage >= totalPages - 2) {
-                        pageNum = totalPages - 4 + i;
-                      } else {
-                        pageNum = currentPage - 2 + i;
-                      }
-                      
-                      return (
-                        <button
-                          key={pageNum}
-                          onClick={() => setCurrentPage(pageNum)}
-                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                            currentPage === pageNum
-                              ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
-                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                          }`}
-                        >
-                          {pageNum}
-                        </button>
-                      );
-                    })}
+                    <span className="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300 focus:outline-offset-0">
+                      Page {pagination.page} of {pagination.totalPages}
+                    </span>
                     <button
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                      disabled={!pagination.hasNextPage}
+                      className="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <span className="sr-only">Next</span>
                       <ChevronRightIcon className="h-5 w-5" aria-hidden="true" />
