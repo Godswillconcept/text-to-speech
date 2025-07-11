@@ -1,10 +1,18 @@
 const path = require('path');
 const fs = require('fs').promises;
-const Operation = require('../models/Operation');
-const { paraphraseText, summarizeText, extractKeyPoints, changeTone } = require('../services/aiService');
-const { saveFile, extractText, cleanup, getUploadDir, getDocumentDirs } = require('../services/documentService');
+const db = require('../models');
+const { 
+  paraphraseText, 
+  summarizeText, 
+  extractKeyPoints, 
+  changeTone,
+  isAIServiceAvailable 
+} = require('../services/aiService');
+const { saveFile, extractText, cleanup } = require('../services/documentService');
 const { ApiError } = require('../middleware/errorHandler');
 const pdfService = require('../services/pdfService');
+
+const Operation = db.Operation;
 
 /**
  * @desc    Paraphrase text
@@ -300,33 +308,54 @@ exports.getHistory = async (req, res, next) => {
  */
 const processDocumentWithOperation = async (req, res, next, operationType, processFn) => {
   try {
+    // Check if AI service is available
+    if (!isAIServiceAvailable()) {
+      throw new ApiError(503, 'AI service is currently unavailable. Please check your API key and try again.');
+    }
+
     if (!req.file) {
       throw new ApiError(400, 'No file uploaded');
     }
 
-    const { originalname, mimetype, size, buffer } = req.file;
+    // Check if file type is supported
+    const supportedMimeTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain'
+    ];
     
-    // Save the uploaded file
-    // Create file info object with the buffer from multer
-    const fileInfo = {
-      originalname,
-      mimetype,
-      size,
-      buffer // Include the file buffer from multer
-    };
-
-    // Save file to appropriate directory
-    const savedFile = await saveFile(fileInfo);
-    
-    try {
-      // Extract text from the document
-      const extractedText = await extractText({
-        path: savedFile.path,
-        mimetype: fileInfo.mimetype
-      });
+    if (!supportedMimeTypes.includes(file.mimetype)) {
+      const allowedTypes = supportedMimeTypes.map(mime => {
+        if (mime.includes('pdf')) return 'PDF';
+        if (mime.includes('msword') || mime.includes('wordprocessingml')) return 'DOC/DOCX';
+        if (mime === 'text/plain') return 'TXT';
+        return mime;
+      }).filter((value, index, self) => self.indexOf(value) === index);
       
-      if (!extractedText) {
-        throw new ApiError(400, 'Could not extract text from the document');
+      throw new ApiError(400, `Unsupported file type. Please upload one of the following: ${allowedTypes.join(', ')}`);
+    }
+
+    let savedFile;
+    try {
+      savedFile = await saveFile(file);
+      const { originalname, size } = file;
+
+      // Extract text from the document
+      let extractedText;
+      try {
+        extractedText = await extractText({
+          path: savedFile.path,
+          mimetype: file.mimetype,
+          originalname: file.originalname
+        });
+      } catch (extractError) {
+        console.error('Error extracting text from document:', extractError);
+        throw new ApiError(400, `Failed to process the uploaded file: ${extractError.message || 'Unsupported file format or corrupted file'}`);
+      }
+
+      if (!extractedText || typeof extractedText !== 'string' || extractedText.trim() === '') {
+        throw new ApiError(400, 'The document appears to be empty or does not contain extractable text');
       }
 
       // Process the text with the provided operation function

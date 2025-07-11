@@ -10,7 +10,7 @@ module.exports = {
         type: Sequelize.INTEGER
       },
       type: {
-        type: Sequelize.ENUM('text-to-speech', 'pdf-to-speech', 'paraphrase', 'summarize', 'key-points', 'change-tone'),
+        type: Sequelize.ENUM('text-to-speech', 'pdf-to-speech', 'paraphrase', 'summarize', 'key-points', 'change-tone', 'document-paraphrase', 'document-summarize', 'document-key-points', 'document-change-tone'),
         allowNull: false
       },
       input: {

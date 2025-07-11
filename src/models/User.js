@@ -1,8 +1,7 @@
-const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
-const { sequelize } = require('../config/database');
 
-const User = sequelize.define('User', {
+module.exports = (sequelize, DataTypes) => {
+  const User = sequelize.define('User', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -68,4 +67,24 @@ User.prototype.validPassword = async function(password) {
   return await bcrypt.compare(password, this.password);
 };
 
-module.exports = User;
+// Define associations
+User.associate = (models) => {
+  // User-Operation relationship
+  User.hasMany(models.Operation, {
+    foreignKey: 'userId',
+    as: 'operations',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+  });
+
+  // User-AudioFile relationship
+  User.hasMany(models.AudioFile, {
+    foreignKey: 'userId',
+    as: 'audioFiles',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+  });
+};
+
+  return User;
+};

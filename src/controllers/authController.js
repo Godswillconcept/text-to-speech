@@ -1,6 +1,7 @@
-const jwt = require('jsonwebtoken');
-const { validationResult } = require('express-validator');
-const User = require('../models/User');
+const jwt = require("jsonwebtoken");
+const { validationResult } = require("express-validator");
+const db = require("../models");
+const User = db.User;
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
@@ -18,35 +19,38 @@ exports.register = async (req, res) => {
     // Check if user already exists
     let user = await User.findOne({ where: { email } });
     if (user) {
-      return res.status(400).json({ errors: [{ msg: 'User already exists' }] });
+      return res.status(400).json({ errors: [{ msg: "User already exists" }] });
     }
 
     // Create user
     user = await User.create({
       username,
       email,
-      password
+      password,
     });
 
     // Create and return JWT
     const payload = {
       user: {
-        id: user.id
-      }
+        id: user.id,
+        email: user.email,
+        password: user.password,
+        isAdmin: user.isAdmin,
+      },
     };
 
     jwt.sign(
       payload,
-      process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '5d' },
+      process.env.JWT_SECRET || "your_jwt_secret",
+      { expiresIn: "5d" },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.json({ token, user });
       }
     );
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error');
+    res.status(500).send("Server error");
   }
 };
 
@@ -64,36 +68,39 @@ exports.login = async (req, res) => {
 
   try {
     // Check if user exists
-    const user = await User.scope('withPassword').findOne({ where: { email } });
+    const user = await User.scope("withPassword").findOne({ where: { email } });
     if (!user) {
-      return res.status(400).json({ errors: [{ msg: 'Invalid credentials' }] });
+      return res.status(400).json({ errors: [{ msg: "Invalid credentials" }] });
     }
 
     // Check password
     const isMatch = await user.validPassword(password);
     if (!isMatch) {
-      return res.status(400).json({ errors: [{ msg: 'Invalid credentials' }] });
+      return res.status(400).json({ errors: [{ msg: "Invalid credentials" }] });
     }
 
     // Create and return JWT
     const payload = {
       user: {
-        id: user.id
-      }
+        id: user.id,
+        email: user.email,
+        password: user.password,
+        isAdmin: user.isAdmin,
+      },
     };
 
     jwt.sign(
       payload,
-      process.env.JWT_SECRET || 'your_jwt_secret',
-      { expiresIn: '5d' },
+      process.env.JWT_SECRET || "your_jwt_secret",
+      { expiresIn: "5d" },
       (err, token) => {
         if (err) throw err;
-        res.json({ token });
+        res.json({ token, user });
       }
     );
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error');
+    res.status(500).send("Server error");
   }
 };
 
@@ -103,12 +110,12 @@ exports.login = async (req, res) => {
 exports.getCurrentUser = async (req, res) => {
   try {
     const user = await User.findByPk(req.user.id, {
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: ["password"] },
     });
     res.json(user);
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error');
+    res.status(500).send("Server error");
   }
 };
 
@@ -118,23 +125,26 @@ exports.getCurrentUser = async (req, res) => {
 exports.logout = async (req, res) => {
   try {
     // Get token from header
-    const authHeader = req.header('Authorization');
-    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
-    
+    const authHeader = req.header("Authorization");
+    const token =
+      authHeader && authHeader.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : null;
+
     if (!token) {
-      return res.status(400).json({ msg: 'No token provided' });
+      return res.status(400).json({ msg: "No token provided" });
     }
 
     // Here you would typically add the token to a blacklist (if using one)
     // For example: await TokenBlacklist.create({ token });
-    
-    res.status(200).json({ 
-      success: true, 
-      msg: 'Successfully logged out' 
+
+    res.status(200).json({
+      success: true,
+      msg: "Successfully logged out",
     });
   } catch (err) {
-    console.error('Logout error:', err);
-    res.status(500).json({ msg: 'Server error during logout' });
+    console.error("Logout error:", err);
+    res.status(500).json({ msg: "Server error during logout" });
   }
 };
 
@@ -144,11 +154,11 @@ exports.logout = async (req, res) => {
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: { exclude: ['password'] }
+      attributes: { exclude: ["password"] },
     });
     res.json(users);
   } catch (err) {
     console.error(err.message);
-    res.status(500).send('Server error');
+    res.status(500).send("Server error");
   }
 };

@@ -1,52 +1,71 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+module.exports = (sequelize, DataTypes) => {
+  const Operation = sequelize.define("Operation", {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    type: {
+      type: DataTypes.ENUM(
+        "text-to-speech",
+        "pdf-to-speech",
+        "paraphrase",
+        "summarize",
+        "key-points",
+        "change-tone",
+        "document-paraphrase",
+        "document-summarize",
+        "document-key-points",
+        "document-change-tone"
+      ),
+      allowNull: false,
+    },
+    input: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    output: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    status: {
+      type: DataTypes.ENUM("pending", "completed", "failed"),
+      defaultValue: "pending",
+    },
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: "Users",
+        key: "id",
+      },
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    },
+    metadata: {
+      type: DataTypes.JSON,
+      allowNull: true,
+    },
+  });
 
-const Operation = sequelize.define('Operation', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  type: {
-    type: DataTypes.ENUM('text-to-speech', 'pdf-to-speech', 'paraphrase', 'summarize', 'key-points', 'change-tone', 'document-paraphrase', 'document-summarize', 'document-key-points', 'document-change-tone'),
-    allowNull: false
-  },
-  input: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  output: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  status: {
-    type: DataTypes.ENUM('pending', 'completed', 'failed'),
-    defaultValue: 'pending'
-  },
-  metadata: {
-    type: DataTypes.JSON,
-    allowNull: true
-  }
-});
+  // Define associations
+  Operation.associate = (models) => {
+    // Operation-User relationship
+    Operation.belongsTo(models.User, {
+      foreignKey: "userId",
+      as: "user",
+      onDelete: "CASCADE",
+      onUpdate: "CASCADE",
+    });
 
-// Define associations
-const User = require('./User');
+    // Operation-AudioFile relationship
+    Operation.hasOne(models.AudioFile, {
+      foreignKey: "operationId",
+      as: "audioFile",
+      onDelete: "SET NULL",
+      onUpdate: "CASCADE",
+    });
+  };
 
-// Define the foreign key relationship
-Operation.belongsTo(User, {
-  foreignKey: {
-    name: 'userId',
-    allowNull: false,
-    type: DataTypes.INTEGER
-  },
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
-
-// Add the association to User model
-User.hasMany(Operation, {
-  foreignKey: 'userId',
-  as: 'operations'
-});
-
-module.exports = Operation;
+  return Operation;
+};

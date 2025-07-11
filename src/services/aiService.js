@@ -1,14 +1,38 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const { ApiError } = require('../middleware/errorHandler');
 
-// Initialize Google Gemini AI
+// Track if AI is available
+let isAIAvailable = false;
 let genAI;
-try {
-  genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY || '');
-} catch (error) {
-  console.error('Failed to initialize Google Generative AI:', error);
-  console.warn('AI text manipulation features will be disabled. Set GOOGLE_AI_API_KEY to enable.');
-}
+
+// Initialize Google Gemini AI if API key is available
+const initAIService = () => {
+  const apiKey = process.env.GOOGLE_AI_API_KEY;
+  if (!apiKey) {
+    console.warn('GOOGLE_AI_API_KEY is not set. AI features will be disabled.');
+    return false;
+  }
+
+  try {
+    genAI = new GoogleGenerativeAI(apiKey);
+    isAIAvailable = true;
+    console.log('Google Generative AI service initialized successfully');
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize Google Generative AI:', error);
+    console.warn('AI text manipulation features will be disabled.');
+    return false;
+  }
+};
+
+// Initialize on require
+initAIService();
+
+/**
+ * Check if AI service is available
+ * @returns {boolean} True if AI service is available
+ */
+const isAIServiceAvailable = () => isAIAvailable;
 
 /**
  * Generate text using Google's Gemini AI
@@ -19,8 +43,8 @@ try {
  * @returns {Promise<string>} - The generated text
  */
 const generateText = async (prompt, { maxOutputTokens = 2048, temperature = 0.7 } = {}) => {
-  if (!genAI) {
-    throw new ApiError(500, 'AI service is not configured');
+  if (!isAIAvailable) {
+    throw new ApiError(503, 'AI service is currently unavailable. Please check your API key and try again.');
   }
 
   try {
@@ -129,10 +153,19 @@ const changeTone = async (text, targetTone) => {
   });
 };
 
+// Clean up on process exit
+process.on('exit', () => {
+  // Clean up any resources if needed
+  isAIAvailable = false;
+  genAI = null;
+});
+
 module.exports = {
   generateText,
   paraphraseText,
   summarizeText,
   extractKeyPoints,
-  changeTone
+  changeTone,
+  isAIServiceAvailable,
+  initAIService
 };

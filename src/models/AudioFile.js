@@ -1,9 +1,8 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
 const path = require('path');
 const fs = require('fs');
 
-const AudioFile = sequelize.define('AudioFile', {
+module.exports = (sequelize, DataTypes) => {
+  const AudioFile = sequelize.define('AudioFile', {
   id: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -32,55 +31,43 @@ const AudioFile = sequelize.define('AudioFile', {
   duration: {
     type: DataTypes.INTEGER, // Duration in seconds
     allowNull: true
+  },
+  url: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });
 
 // Define associations
-const User = require('./User');
-const Operation = require('./Operation');
+AudioFile.associate = (models) => {
+  // AudioFile-User relationship
+  AudioFile.belongsTo(models.User, {
+    foreignKey: 'userId',
+    as: 'user',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+  });
 
-// Define foreign key relationships
-AudioFile.belongsTo(User, {
-  foreignKey: {
-    name: 'userId',
-    allowNull: false,
-    type: DataTypes.INTEGER
-  },
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
+  // AudioFile-Operation relationship
+  AudioFile.belongsTo(models.Operation, {
+    foreignKey: 'operationId',
+    as: 'operation',
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE'
+  });
+};
 
-AudioFile.belongsTo(Operation, {
-  foreignKey: {
-    name: 'operationId',
-    allowNull: false,
-    type: DataTypes.INTEGER
-  },
-  onDelete: 'CASCADE',
-  onUpdate: 'CASCADE'
-});
-
-// Add associations to User and Operation models
-User.hasMany(AudioFile, {
-  foreignKey: 'userId',
-  as: 'audioFiles'
-});
-
-Operation.hasOne(AudioFile, {
-  foreignKey: 'operationId',
-  as: 'audioFile'
-});
-
-// Hook to delete the physical file when the record is deleted
-AudioFile.afterDestroy(async (audioFile) => {
-  try {
-    const filePath = path.join(__dirname, '../../', audioFile.path);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+  // Hook to delete the physical file when the record is deleted
+  AudioFile.afterDestroy(async (audioFile) => {
+    try {
+      const filePath = path.join(__dirname, '../../', audioFile.path);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    } catch (error) {
+      console.error('Error deleting audio file:', error);
     }
-  } catch (error) {
-    console.error('Error deleting audio file:', error);
-  }
-});
+  });
 
-module.exports = AudioFile;
+  return AudioFile;
+};

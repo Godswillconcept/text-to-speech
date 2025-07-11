@@ -1,4 +1,4 @@
-const { Sequelize } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize');
 
 const sequelize = new Sequelize(
   process.env.DB_NAME || 'text_to_speech',
@@ -13,8 +13,15 @@ const sequelize = new Sequelize(
       min: 0,
       acquire: 30000,
       idle: 10000
+    },
+    define: {
+      timestamps: true,
+      underscored: true
     }
   }
 );
 
-module.exports = { sequelize };
+module.exports = { 
+  sequelize,
+  DataTypes 
+};
