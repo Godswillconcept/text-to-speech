@@ -218,7 +218,7 @@ exports.getHistory = async (req, res, next) => {
     const { count, rows } = await Operation.findAndCountAll({
       where: {
         userId: userId,
-        type: "text-to-speech",
+        type: ["text-to-speech", "pdf-to-speech"],
       },
       order: [["createdAt", "DESC"]],
       limit: limit,
