@@ -10,6 +10,7 @@ import SummarizerPage from './pages/SummarizerPage';
 import KeyPointsPage from './pages/KeyPointsPage';
 import ChangeTonePage from './pages/ChangeTonePage';
 import OperationsPage from './pages/OperationsPage';
+import OperationDetailPage from './pages/OperationDetailPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuth } from './hooks/useAuth.js';
 import './App.css';
@@ -111,6 +112,11 @@ function App() {
             <Route path="/operations" element={
               <ProtectedRoute>
                 <OperationsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/operations/:id" element={
+              <ProtectedRoute>
+                <OperationDetailPage />
               </ProtectedRoute>
             } />
             {/* Catch-all route for 404s */}

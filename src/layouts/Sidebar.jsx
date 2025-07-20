@@ -157,7 +157,7 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
               <div className="h-8 w-8 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center">
                 <span className="text-white font-bold text-sm">S</span>
               </div>
-              <span className="ml-2 text-xl font-semibold text-gray-900">subssum</span>
+              <span className="ml-2 text-xl font-semibold text-gray-900">SummaVoice</span>
             </div>
           </div>
           

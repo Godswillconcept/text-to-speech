@@ -1,9 +1,12 @@
-import { useState, Fragment } from 'react';
+import { useReducer, Fragment } from 'react';
 import { Tab, Listbox } from '@headlessui/react';
 import { DocumentArrowUpIcon, LanguageIcon, SparklesIcon, CheckIcon, ChevronUpDownIcon } from '@heroicons/react/24/outline';
+import ReactMarkdown from 'react-markdown';
 
 import { useApi } from '../hooks/useApi.js';
 import { changeToneOfText, changeToneOfPdf } from '../utils/api.js';
+import { changeToneReducer, changeToneInitialState, changeToneActions } from '../reducers/changeToneReducer.js';
+import { withRetry } from '../utils/retryUtils.js';
 import TextInput from '../components/TextInput';
 import DocumentUploader from '../components/DocumentUploader';
 
@@ -12,10 +15,8 @@ function classNames(...classes) {
 }
 
 const ChangeTonePage = () => {
-  const [inputText, setInputText] = useState('');
-  const [file, setFile] = useState(null);
-  const [tone, setTone] = useState('professional');
-  const [tonedText, setTonedText] = useState('');
+  const [state, dispatch] = useReducer(changeToneReducer, changeToneInitialState);
+  const { inputText, file, tone, tonedText } = state;
 
   const { 
     isLoading: isTextLoading, 
@@ -41,37 +42,84 @@ const ChangeTonePage = () => {
   };
 
   const handleChangeTone = async (tabIndex) => {
-    setTonedText('');
+    console.log('handleChangeTone called with tabIndex:', tabIndex);
+    dispatch(changeToneActions.clearResult());
     clearErrors();
     
     try {
       let result;
       if (tabIndex === 0) {
-        if (!inputText.trim()) return;
+        console.log('Processing text input:', inputText ? `"${inputText.substring(0, 50)}..."` : 'Empty');
+        if (!inputText.trim()) {
+          console.log('No input text provided');
+          return;
+        }
         // Add retry logic with exponential backoff
         result = await withRetry(
-          () => changeToneFromText({ text: inputText, tone }),
+          async () => {
+            console.log('Calling changeToneFromText API');
+            const response = await changeToneFromText({ text: inputText, tone });
+            console.log('changeToneFromText response:', response);
+            return response;
+          },
           3, // max retries
           1000 // initial delay in ms
         );
       } else {
-        if (!file) return;
+        console.log('Processing file upload:', file ? file.name : 'No file');
+        if (!file) {
+          console.log('No file selected');
+          return;
+        }
         const formData = new FormData();
         formData.append('file', file);
         formData.append('tone', tone);
         // Add retry logic with exponential backoff
         result = await withRetry(
-          () => changeToneFromFile(formData),
+          async () => {
+            console.log('Calling changeToneFromFile API');
+            const response = await changeToneFromFile(formData);
+            console.log('changeToneFromFile response:', response);
+            return response;
+          },
           3, // max retries
           1000 // initial delay in ms
         );
       }
       
       // Handle the response based on the API structure
+      console.log('Raw API Response:', JSON.stringify(result, null, 2));
+      
       if (result) {
-        const tonedText = typeof result === 'object' ? result.result || result.tonedText : result;
-        if (tonedText) {
-          setTonedText(tonedText);
+        // The API functions now consistently return the text in the 'text' property
+        let processedText = result.text || result.result || '';
+        console.log('Extracted tonedText:', processedText ? `Text found (${processedText.length} chars)` : 'No text found');
+        
+        if (processedText) {
+          console.log('First 200 chars of tonedText:', processedText.substring(0, 200) + '...');
+          // Ensure processedText is a string
+          if (typeof processedText !== 'string') {
+            console.warn('processedText is not a string, converting...');
+            processedText = String(processedText);
+          }
+          // Clean up the text while preserving markdown structure
+          processedText = processedText
+            // Remove any HTML tags that might be in the response
+            .replace(/<[^>]*>?/gm, '')
+            // Remove the outer code block markers (triple backticks) if they wrap the entire content
+            .replace(/^\s*```(?:markdown)?\s*([\s\S]*?)\s*```\s*$/g, '$1')
+            // Clean up any remaining triple backticks that might be malformed
+            .replace(/`{3,}/g, '```')
+            // Normalize newlines
+            .replace(/\r\n/g, '\n')
+            // Remove any trailing spaces at the end of lines
+            .replace(/ +\n/g, '\n')
+            // Remove any leading/trailing whitespace
+            .trim()
+            // Add a newline after each heading for better markdown rendering
+            .replace(/^(#+ .*)$/gm, '$1\n');
+          
+          dispatch(changeToneActions.setTonedText(processedText));
         } else {
           throw new Error('No text was returned from the server');
         }
@@ -80,34 +128,6 @@ const ChangeTonePage = () => {
       console.error('Error changing tone:', error);
       // The error will be handled by the useApi hook and set in the error state
     }
-  };
-  
-  // Helper function for retrying failed requests with exponential backoff
-  const withRetry = async (fn, maxRetries, delay) => {
-    let lastError;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      try {
-        return await fn();
-      } catch (error) {
-        lastError = error;
-        console.warn(`Attempt ${attempt} failed:`, error);
-        
-        // Don't retry for client errors (4xx) except 429 (Too Many Requests)
-        if (error.status && error.status >= 400 && error.status < 500 && error.status !== 429) {
-          break;
-        }
-        
-        // Exponential backoff: 1s, 2s, 4s, etc.
-        if (attempt < maxRetries) {
-          const waitTime = delay * Math.pow(2, attempt - 1);
-          console.log(`Retrying in ${waitTime}ms...`);
-          await new Promise(resolve => setTimeout(resolve, waitTime));
-        }
-      }
-    }
-    
-    throw lastError || new Error('Request failed after all retries');
   };
 
   const tones = [
@@ -118,6 +138,15 @@ const ChangeTonePage = () => {
     { id: 'formal', name: 'Formal' },
     { id: 'friendly', name: 'Friendly' },
   ];
+
+  // Debug log for component render
+  console.log('Rendering ChangeTonePage with state:', {
+    isLoading,
+    error,
+    tonedText: tonedText ? `Has text (${tonedText.length} chars)` : 'No text',
+    inputText: inputText ? `Has input (${inputText.length} chars)` : 'No input',
+    file: file ? `File: ${file.name}` : 'No file'
+  });
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -168,7 +197,7 @@ const ChangeTonePage = () => {
               <Tab.Panel>
                 <TextInput
                   value={inputText}
-                  onChange={setInputText}
+                  onChange={(text) => dispatch(changeToneActions.setInputText(text))}
                   placeholder="Enter text to change tone..."
                   multiline
                   rows={8}
@@ -178,10 +207,10 @@ const ChangeTonePage = () => {
                 <DocumentUploader
                   acceptedTypes={['.pdf', '.doc', '.docx', '.txt', '.rtf', '.ppt', '.pptx']}
                   acceptedMimeTypes={['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'application/rtf', 'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation']}
-                  onFileChange={setFile}
+                  onFileChange={(file) => dispatch(changeToneActions.setFile(file))}
                   file={file}
                   onClear={() => {
-                    setFile(null);
+                    dispatch(changeToneActions.clearFile());
                     clearFileError();
                   }}
                 />
@@ -190,7 +219,7 @@ const ChangeTonePage = () => {
 
             <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
               <div className="md:col-span-1">
-                <Listbox value={tone} onChange={setTone}>
+                <Listbox value={tone} onChange={(tone) => dispatch(changeToneActions.setTone(tone))}>
                   {() => (
                     <>
                       <Listbox.Label className="block text-sm font-medium text-gray-700">New Tone</Listbox.Label>
@@ -284,7 +313,38 @@ const ChangeTonePage = () => {
                       </div>
                     </div>
                   )}
-                  {tonedText && !isLoading && !error && <p className="whitespace-pre-wrap">{tonedText}</p>}
+                  {tonedText && !isLoading && !error ? (
+                    <div className="mt-4">
+                      <div className="prose max-w-none mb-4 p-4 border rounded-lg bg-gray-50">
+                        <ReactMarkdown>{tonedText}</ReactMarkdown>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          onClick={() => {
+                            const blob = new Blob([tonedText], { type: 'text/markdown' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'toned-text.md';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-yellow-600 hover:bg-yellow-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500"
+                        >
+                          <svg className="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                            <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Download Text
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-gray-500 text-center py-8">
+                      {isLoading ? 'Processing...' : 'Your toned text will appear here'}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

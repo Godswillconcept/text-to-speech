@@ -14,12 +14,16 @@
     "@heroicons/react": "^2.2.0",
     "@tailwindcss/vite": "^4.1.10",
     "axios": "^1.10.0",
+    "date-fns": "^4.1.0",
     "framer-motion": "^12.18.1",
     "react": "^19.1.0",
     "react-audio-player": "^0.17.0",
     "react-dom": "^19.1.0",
+    "react-icons": "^5.5.0",
+    "react-markdown": "^10.1.0",
     "react-pdf": "^9.2.1",
     "react-router-dom": "^7.6.2",
+    "react-toastify": "^11.0.5",
     "tailwindcss": "^4.1.10"
   },
   "devDependencies": {

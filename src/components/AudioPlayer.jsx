@@ -135,12 +135,44 @@ const AudioPlayer = ({
     audio.pause();
 
     if (audioUrl) {
+      console.log('AudioPlayer: Setting audio source to:', audioUrl);
       audio.src = audioUrl;
       audio.load();
+
+      // Add error event listener
+      const handleError = (e) => {
+        console.error('Audio loading error:', e);
+        console.error('Audio error details:', audio.error);
+      };
+      
+      const handleCanPlay = () => {
+        console.log('Audio can play - duration:', audio.duration);
+      };
+      
+      const handleLoadStart = () => {
+        console.log('Audio load started');
+      };
+      
+      const handleLoadedData = () => {
+        console.log('Audio data loaded');
+      };
+
+      audio.addEventListener('error', handleError);
+      audio.addEventListener('canplay', handleCanPlay);
+      audio.addEventListener('loadstart', handleLoadStart);
+      audio.addEventListener('loadeddata', handleLoadedData);
 
       if (wasPlaying) {
         audio.play().catch(console.error);
       }
+
+      // Cleanup function
+      return () => {
+        audio.removeEventListener('error', handleError);
+        audio.removeEventListener('canplay', handleCanPlay);
+        audio.removeEventListener('loadstart', handleLoadStart);
+        audio.removeEventListener('loadeddata', handleLoadedData);
+      };
     } else {
       audio.src = '';
     }

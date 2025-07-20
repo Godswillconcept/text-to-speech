@@ -1,24 +1,27 @@
-import { useState, useCallback, useEffect, useMemo, Fragment } from 'react';
+import { useReducer, useCallback, useEffect, useMemo, Fragment } from 'react';
 import { Listbox, Transition } from '@headlessui/react';
 import { ArrowPathIcon, SpeakerWaveIcon, CheckIcon, ChevronUpDownIcon } from '@heroicons/react/24/outline';
 import { textToSpeech } from '../utils/api';
 import { useApi } from '../hooks/useApi.js';
+import { textToSpeechReducer, textToSpeechInitialState, textToSpeechActions } from '../reducers/textToSpeechReducer.js';
 import AudioPlayer from '../components/AudioPlayer';
 import TextInput from '../components/TextInput';
 import ttsConfig from '../config/ttsConfig';
 
 const TextToSpeech = () => {
-  const [text, setText] = useState('');
-  // Set default language to the first available language code
-  const [language, setLanguage] = useState(ttsConfig.languages[0]?.code || 'en-us');
-  const [voice, setVoice] = useState('');
-  // Initialize format with the first available format code
-  const [format, setFormat] = useState(ttsConfig.formats[0]?.code || ttsConfig.defaults.format);
-  const [codec, setCodec] = useState(ttsConfig.defaults.codec);
-  const [rate, setRate] = useState(ttsConfig.defaults.speed);
-  const [pitch, setPitch] = useState(1.0); // Add separate pitch state
-  const [useBase64, setUseBase64] = useState(ttsConfig.defaults.base64);
-  const [audioUrl, setAudioUrl] = useState('');
+  // Initialize state with config defaults
+  const initialStateWithDefaults = {
+    ...textToSpeechInitialState,
+    language: ttsConfig.languages[0]?.code || 'en-us',
+    format: ttsConfig.formats[0]?.code || ttsConfig.defaults.format,
+    codec: ttsConfig.defaults.codec,
+    rate: ttsConfig.defaults.speed,
+    useBase64: ttsConfig.defaults.base64
+  };
+  
+  const [state, dispatch] = useReducer(textToSpeechReducer, initialStateWithDefaults);
+  const { text, language, voice, format, codec, rate, pitch, useBase64, audioUrl } = state;
+  
   const { data: audioUrlFromApi, isLoading, error, request: generateSpeech } = useApi(textToSpeech);
   
   // Get available voices for the selected language
@@ -40,7 +43,7 @@ const TextToSpeech = () => {
       const defaultFormat = formatOptions.find(f => f.code === '16khz_16bit_stereo') || formatOptions[0];
       if (defaultFormat) {
         console.log('Setting default format:', defaultFormat.code);
-        setFormat(defaultFormat.code);
+        dispatch(textToSpeechActions.setFormat(defaultFormat.code));
       }
     }
   }, [formatOptions, format]);
@@ -49,9 +52,9 @@ const TextToSpeech = () => {
   useEffect(() => {
     if (availableVoices.length > 0) {
       const defaultVoice = availableVoices.find(v => v.default) || availableVoices[0];
-      setVoice(defaultVoice?.id || '');
+      dispatch(textToSpeechActions.setVoice(defaultVoice?.id || ''));
     } else {
-      setVoice('');
+      dispatch(textToSpeechActions.setVoice(''));
     }
   }, [availableVoices]);
 
@@ -61,7 +64,7 @@ const TextToSpeech = () => {
       // If it's already a blob URL or data URL, use it directly
       if (audioUrlFromApi.startsWith('blob:') || audioUrlFromApi.startsWith('data:')) {
         console.log('Using blob/data URL directly:', audioUrlFromApi);
-        setAudioUrl(audioUrlFromApi);
+        dispatch(textToSpeechActions.setAudioUrl(audioUrlFromApi));
       } else {
         // Otherwise, construct the full URL
         const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
@@ -70,7 +73,7 @@ const TextToSpeech = () => {
           : `${baseUrl}${audioUrlFromApi.startsWith('/') ? '' : '/'}${audioUrlFromApi}`;
         
         console.log('Constructed audio URL:', fullUrl);
-        setAudioUrl(fullUrl);
+        dispatch(textToSpeechActions.setAudioUrl(fullUrl));
       }
     }
   }, [audioUrlFromApi]);
@@ -175,14 +178,14 @@ const TextToSpeech = () => {
             rows={8}
             placeholder="Type or paste your text here..."
             value={text}
-            onChange={setText}
+            onChange={(text) => dispatch(textToSpeechActions.setText(text))}
           />
         </div>
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Language Selector */}
-            <Listbox value={language} onChange={setLanguage}>
+            <Listbox value={language} onChange={(language) => dispatch(textToSpeechActions.setLanguage(language))}>
               {({ open }) => (
                 <div className="w-full">
                   <Listbox.Label className="block text-sm font-medium text-gray-700 mb-1">
@@ -243,7 +246,7 @@ const TextToSpeech = () => {
             </Listbox>
             
             {/* Voice Selector */}
-            <Listbox value={voice} onChange={setVoice} disabled={availableVoices.length === 0}>
+            <Listbox value={voice} onChange={(voice) => dispatch(textToSpeechActions.setVoice(voice))} disabled={availableVoices.length === 0}>
               {({ open }) => (
                 <div className="w-full">
                   <Listbox.Label className="block text-sm font-medium text-gray-700 mb-1">
@@ -319,7 +322,7 @@ const TextToSpeech = () => {
               value={format} 
               onChange={(value) => {
                 console.log('Selected format changed:', value);
-                setFormat(value);
+                dispatch(textToSpeechActions.setFormat(value));
               }}
             >
               {({ open }) => (
@@ -382,7 +385,7 @@ const TextToSpeech = () => {
             </Listbox>
 
             {/* Codec Selector */}
-            <Listbox value={codec} onChange={setCodec}>
+            <Listbox value={codec} onChange={(codec) => dispatch(textToSpeechActions.setCodec(codec))}>
               {({ open }) => (
                 <div className="w-full">
                   <Listbox.Label className="block text-sm font-medium text-gray-700 mb-1">
@@ -445,7 +448,7 @@ const TextToSpeech = () => {
                 id="base64"
                 type="checkbox"
                 checked={useBase64}
-                onChange={(e) => setUseBase64(e.target.checked)}
+                onChange={(e) => dispatch(textToSpeechActions.setUseBase64(e.target.checked))}
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
               <label htmlFor="base64" className="ml-2 block text-sm text-gray-700">
@@ -465,7 +468,7 @@ const TextToSpeech = () => {
               max="2" 
               step="0.1" 
               value={rate} 
-              onChange={e => setRate(parseFloat(e.target.value))} 
+              onChange={e => dispatch(textToSpeechActions.setRate(parseFloat(e.target.value)))} 
               className="w-full h-2 mt-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" 
             />
           </div>
@@ -481,7 +484,7 @@ const TextToSpeech = () => {
               max="1.5" 
               step="0.1" 
               value={pitch} 
-              onChange={e => setPitch(parseFloat(e.target.value))} 
+              onChange={e => dispatch(textToSpeechActions.setPitch(parseFloat(e.target.value)))} 
               className="w-full h-2 mt-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-indigo-600" 
             />
           </div>

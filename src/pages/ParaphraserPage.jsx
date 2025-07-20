@@ -1,11 +1,12 @@
 /* eslint-disable no-unused-vars */
-import { useState, Fragment, useCallback } from 'react';
+import { useReducer, Fragment, useCallback } from 'react';
 import { Tab, Listbox, Transition } from '@headlessui/react';
 import { motion } from 'framer-motion';
-import { DocumentArrowUpIcon, LanguageIcon, ArrowPathIcon, CheckIcon, ChevronUpDownIcon } from '@heroicons/react/24/outline';
+import { DocumentArrowUpIcon, LanguageIcon, ArrowPathIcon, CheckIcon, ChevronUpDownIcon, DocumentArrowDownIcon } from '@heroicons/react/24/outline';
 
 import { useApi } from '../hooks/useApi.js';
 import { paraphraseText, paraphrasePdf } from '../utils/api.js';
+import { paraphraserReducer, paraphraserInitialState, paraphraserActions } from '../reducers/paraphraserReducer.js';
 import TextInput from '../components/TextInput';
 import DocumentUploader from '../components/DocumentUploader';
 
@@ -15,11 +16,8 @@ function classNames(...classes) {
 }
 
 const ParaphraserPage = () => {
-  // State for the inputs
-  const [inputText, setInputText] = useState('');
-  const [file, setFile] = useState(null);
-  const [outputText, setOutputText] = useState('');
-  const [tone, setTone] = useState('neutral'); // Default to neutral to match backend
+  const [state, dispatch] = useReducer(paraphraserReducer, paraphraserInitialState);
+  const { inputText, file, outputText, tone, complexity, pdfUrl } = state;
   
   // Two instances of useApi for our two different endpoints
   const { 
@@ -39,8 +37,77 @@ const ParaphraserPage = () => {
   const isLoading = isTextLoading || isFileLoading;
   const error = textError || fileError;
 
+  const handleDownloadPdf = async () => {
+    if (!pdfUrl) return;
+    
+    try {
+      const downloadButton = document.getElementById('download-pdf-button');
+      if (downloadButton) {
+        downloadButton.disabled = true;
+        const originalText = downloadButton.textContent;
+        downloadButton.innerHTML = '<span class="flex items-center"><ArrowPathIcon className="animate-spin h-4 w-4 mr-2" />Preparing...</span>';
+        
+        try {
+          // Ensure the URL is absolute by prepending the API base URL if it's a relative path
+          const fullUrl = pdfUrl.startsWith('http') ? pdfUrl : `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000'}${pdfUrl}`;
+          
+          const response = await fetch(fullUrl, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+              'Accept': 'application/pdf'
+            },
+            credentials: 'include'
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Failed to download PDF: ${response.status} ${response.statusText}`);
+          }
+          
+          // Get the filename from the Content-Disposition header or generate one
+          const contentDisposition = response.headers.get('Content-Disposition');
+          let filename = `paraphrased_${new Date().toISOString().split('T')[0]}.pdf`;
+          
+          if (contentDisposition) {
+            const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+            if (filenameMatch && filenameMatch[1]) {
+              filename = filenameMatch[1].replace(/['"]/g, '');
+            }
+          }
+          
+          // Convert the response to a blob
+          const blob = await response.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          
+          // Create a temporary anchor element
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          
+          // Clean up
+          setTimeout(() => {
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(blobUrl);
+          }, 100);
+          
+        } finally {
+          // Restore button state
+          if (downloadButton) {
+            downloadButton.disabled = false;
+            downloadButton.innerHTML = originalText;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      // Show error to user (you might want to use a toast notification here)
+      alert(`Failed to download PDF: ${error.message}`);
+    }
+  };
+
   const handleParaphrase = async (tabIndex) => {
-    setOutputText(''); // Clear previous results
+    dispatch(paraphraserActions.clearOutput()); // Clear previous results
     clearTextError();
     clearFileError();
     
@@ -53,18 +120,22 @@ const ParaphraserPage = () => {
           return;
         }
         
-        result = await paraphraseFromText({ 
-          text: inputText, 
-          tone: tone.toLowerCase()
+        result = await paraphraseFromText({
+          text: inputText,
+          tone: tone.toLowerCase(),
+          complexity: complexity.toLowerCase(),
         });
         
         // Handle the response format from the backend
         if (result && result.text) {
-          setOutputText(result.text);
+          dispatch(paraphraserActions.setOutputText(result.text));
+          if (result.pdfUrl) dispatch(paraphraserActions.setPdfUrl(result.pdfUrl));
         } else if (result && result.paraphrasedText) {
-          setOutputText(result.paraphrasedText);
+          dispatch(paraphraserActions.setOutputText(result.paraphrasedText));
+          if (result.pdfUrl) dispatch(paraphraserActions.setPdfUrl(result.pdfUrl));
         } else if (result && result.result) {
-          setOutputText(result.result);
+          dispatch(paraphraserActions.setOutputText(result.result));
+          if (result.pdfUrl) dispatch(paraphraserActions.setPdfUrl(result.pdfUrl));
         } else {
           console.error('Unexpected response format:', result);
           throw new Error('Received an unexpected response format from the server');
@@ -78,17 +149,19 @@ const ParaphraserPage = () => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('tone', tone.toLowerCase());
-        formData.append('complexity', 'maintain');
-        
+        formData.append('complexity', complexity.toLowerCase());
         result = await paraphraseFromFile(formData);
         
         // Handle the response format from the backend
         if (result && result.text) {
-          setOutputText(result.text);
+          dispatch(paraphraserActions.setOutputText(result.text));
+          if (result.pdfUrl) dispatch(paraphraserActions.setPdfUrl(result.pdfUrl));
         } else if (result && result.paraphrasedText) {
-          setOutputText(result.paraphrasedText);
+          dispatch(paraphraserActions.setOutputText(result.paraphrasedText));
+          if (result.pdfUrl) dispatch(paraphraserActions.setPdfUrl(result.pdfUrl));
         } else if (result && result.result) {
-          setOutputText(result.result);
+          dispatch(paraphraserActions.setOutputText(result.result));
+          if (result.pdfUrl) dispatch(paraphraserActions.setPdfUrl(result.pdfUrl));
         } else {
           console.error('Unexpected document response format:', result);
           throw new Error('Received an unexpected response format for document processing');
@@ -106,12 +179,12 @@ const ParaphraserPage = () => {
   };
   
   const handleTextChange = (text) => {
-      setInputText(text);
+      dispatch(paraphraserActions.setInputText(text));
       if(textError) clearTextError();
   }
 
   const handleFileChange = (newFile) => {
-      setFile(newFile);
+      dispatch(paraphraserActions.setFile(newFile));
       if(fileError) clearFileError();
   }
 
@@ -125,8 +198,13 @@ const ParaphraserPage = () => {
     { id: 'academic', name: 'Academic' },
     { id: 'business', name: 'Business' },
   ];
+
+  const complexities = [
+    { id: 'simplify', name: 'Simplify' },
+    { id: 'maintain', name: 'Maintain' },
+    { id: 'enhance', name: 'Enhance' },
+  ];
   
-  // Tone options for the select dropdown
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -188,82 +266,144 @@ const ParaphraserPage = () => {
             </Tab.Panels>
 
             {/* Shared Controls and Output */}
-            <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
-              <div className="md:col-span-1">
-                <Listbox value={tone} onChange={setTone} disabled={isLoading}>
-                  {({ open }) => (
-                    <div className="w-full">
-                      <Listbox.Label className="block text-sm font-medium text-gray-700 mb-1">
-                        Tone
-                      </Listbox.Label>
-                      <div className="relative mt-1">
-                        <Listbox.Button 
-                          className={classNames(
-                            'relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm',
-                            isLoading ? 'opacity-75 cursor-not-allowed' : 'hover:border-indigo-300',
-                            'transition-all duration-200 ease-in-out'
-                          )}
-                          aria-describedby="tone-description"
-                        >
-                          <span className="block truncate">
-                            {tones.find(t => t.id === tone)?.name || 'Select tone'}
-                          </span>
-                          <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                            <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
-                          </span>
-                        </Listbox.Button>
-                        <Transition
-                          show={open}
-                          as={Fragment}
-                          leave="transition ease-in duration-100"
-                          leaveFrom="opacity-100"
-                          leaveTo="opacity-0"
-                        >
-                          <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                            {tones.map((toneOption) => (
-                              <Listbox.Option
-                                key={toneOption.id}
-                                className={({ active }) =>
-                                  classNames(
-                                    active ? 'bg-indigo-600 text-white' : 'text-gray-900',
-                                    'relative cursor-default select-none py-2 pl-3 pr-9'
-                                  )
-                                }
-                                value={toneOption.id}
-                              >
-                                {({ selected, active }) => (
-                                  <>
-                                    <span className={classNames(selected ? 'font-semibold' : 'font-normal', 'block truncate')}>
-                                      {toneOption.name}
-                                    </span>
-                                    {selected ? (
-                                      <span
-                                        className={classNames(
-                                          active ? 'text-white' : 'text-indigo-600',
-                                          'absolute inset-y-0 right-0 flex items-center pr-4'
-                                        )}
-                                      >
-                                        <CheckIcon className="h-5 w-5" aria-hidden="true" />
+            <div className="mt-6 grid grid-cols-1 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Tone Selection */}
+                <div>
+                  <Listbox value={tone} onChange={(tone) => dispatch(paraphraserActions.setTone(tone))} disabled={isLoading}>
+                    {({ open }) => (
+                      <>
+                        <Listbox.Label className="block text-sm font-medium text-gray-700 mb-1">
+                          Tone
+                        </Listbox.Label>
+                        <div className="relative">
+                          <Listbox.Button 
+                            className={classNames(
+                              'relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm',
+                              'focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm',
+                              isLoading ? 'bg-gray-50' : ''
+                            )}
+                          >
+                            <span className="block truncate">
+                              {tones.find(t => t.id === tone)?.name || 'Select tone'}
+                            </span>
+                            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                              <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                            </span>
+                          </Listbox.Button>
+                          <Transition
+                            show={open}
+                            as={Fragment}
+                            leave="transition ease-in duration-100"
+                            leaveFrom="opacity-100"
+                            leaveTo="opacity-0"
+                          >
+                            <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+                              {tones.map((toneOption) => (
+                                <Listbox.Option
+                                  key={toneOption.id}
+                                  className={({ active }) =>
+                                    `relative cursor-default select-none py-2 pl-3 pr-9 ${
+                                      active ? 'bg-indigo-100 text-indigo-900' : 'text-gray-900'
+                                    }`
+                                  }
+                                  value={toneOption.id}
+                                >
+                                  {({ selected }) => (
+                                    <>
+                                      <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                        {toneOption.name}
                                       </span>
-                                    ) : null}
-                                  </>
-                                )}
-                              </Listbox.Option>
-                            ))}
-                          </Listbox.Options>
-                        </Transition>
-                      </div>
-                    </div>
-                  )}
-                </Listbox>
-                <p className="mt-1 text-xs text-gray-500" id="tone-description">
-                  Select the tone for paraphrasing
-                </p>
+                                      {selected ? (
+                                        <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-indigo-600">
+                                          <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                                        </span>
+                                      ) : null}
+                                    </>
+                                  )}
+                                </Listbox.Option>
+                              ))}
+                            </Listbox.Options>
+                          </Transition>
+                        </div>
+                      </>
+                    )}
+                  </Listbox>
+                </div>
+
+                {/* Complexity Selection */}
+                <div>
+                  <Listbox value={complexity} onChange={(complexity) => dispatch(paraphraserActions.setComplexity(complexity))} disabled={isLoading}>
+                    {({ open }) => (
+                      <>
+                        <Listbox.Label className="block text-sm font-medium text-gray-700 mb-1">
+                          Complexity
+                        </Listbox.Label>
+                        <div className="relative">
+                          <Listbox.Button 
+                            className={classNames(
+                              'relative w-full cursor-default rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-left shadow-sm',
+                              'focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 sm:text-sm',
+                              isLoading ? 'bg-gray-50' : ''
+                            )}
+                          >
+                            <span className="block truncate">
+                              {complexities.find(c => c.id === complexity)?.name || 'Select complexity'}
+                            </span>
+                            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                              <ChevronUpDownIcon className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                            </span>
+                          </Listbox.Button>
+                          <Transition
+                            show={open}
+                            as={Fragment}
+                            leave="transition ease-in duration-100"
+                            leaveFrom="opacity-100"
+                            leaveTo="opacity-0"
+                          >
+                            <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+                              {complexities.map((complexityOption) => (
+                                <Listbox.Option
+                                  key={complexityOption.id}
+                                  className={({ active }) =>
+                                    `relative cursor-default select-none py-2 pl-3 pr-9 ${
+                                      active ? 'bg-indigo-100 text-indigo-900' : 'text-gray-900'
+                                    }`
+                                  }
+                                  value={complexityOption.id}
+                                >
+                                  {({ selected }) => (
+                                    <>
+                                      <span className={`block truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                                        {complexityOption.name}
+                                      </span>
+                                      {selected ? (
+                                        <span className="absolute inset-y-0 right-0 flex items-center pr-4 text-indigo-600">
+                                          <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                                        </span>
+                                      ) : null}
+                                    </>
+                                  )}
+                                </Listbox.Option>
+                              ))}
+                            </Listbox.Options>
+                          </Transition>
+                        </div>
+                      </>
+                    )}
+                  </Listbox>
+                </div>
               </div>
+
               <div className="md:col-span-2 self-end flex justify-end">
-                <button type="button" onClick={() => handleParaphrase(selectedIndex)} disabled={isLoading} className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed">
-                  <ArrowPathIcon className={`-ml-0.5 mr-1.5 h-5 w-5 ${isLoading && 'animate-spin'}`} />
-                  {isLoading ? 'Paraphrasing...' : 'Paraphrase'}
+                <button 
+                  type="button" 
+                  onClick={() => handleParaphrase(selectedIndex)} 
+                  disabled={isLoading}
+                  className="inline-flex items-center justify-center rounded-md bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:bg-indigo-300 disabled:cursor-not-allowed"
+                >
+                  <ArrowPathIcon className={`-ml-0.5 mr-1.5 h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+                  {isLoading ? 'Processing...' : 'Paraphrase'}
                 </button>
               </div>
             </div>
@@ -271,7 +411,20 @@ const ParaphraserPage = () => {
             {/* Output Section */}
             {(outputText || isLoading || error) && (
               <div className="mt-6">
-                <h3 className="text-lg font-medium text-gray-900">Result</h3>
+                <div className="flex justify-between items-center mb-2">
+                  <h3 className="text-lg font-medium text-gray-900">Result</h3>
+                  {pdfUrl && (
+                    <button
+                      id="download-pdf-button"
+                      onClick={handleDownloadPdf}
+                      disabled={isLoading}
+                      className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <DocumentArrowDownIcon className="h-4 w-4 mr-1.5" />
+                      Download PDF
+                    </button>
+                  )}
+                </div>
                 <div className="mt-2 min-h-[200px] rounded-xl bg-white p-6 shadow-lg ring-1 ring-black ring-opacity-5 whitespace-pre-wrap">
                   {isLoading && <p className="text-gray-500">Generating your paraphrased text...</p>}
                   {error && <p className="text-red-600">Error: {error}</p>}

@@ -1,9 +1,10 @@
 import { useState, useEffect, Fragment, useCallback } from 'react';
-import { 
-  ClockIcon, 
-  DocumentTextIcon, 
-  SpeakerWaveIcon, 
-  PencilIcon, 
+import { useNavigate } from 'react-router-dom';
+import {
+  ClockIcon,
+  DocumentTextIcon,
+  SpeakerWaveIcon,
+  PencilIcon,
   DocumentMagnifyingGlassIcon,
   ArrowDownTrayIcon,
   TrashIcon,
@@ -45,6 +46,7 @@ function classNames(...classes) {
 }
 
 const OperationsPage = () => {
+  const navigate = useNavigate();
   const [operations, setOperations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -70,14 +72,20 @@ const OperationsPage = () => {
         type: selectedType === 'all' ? undefined : selectedType,
         search: searchQuery || undefined
       });
-      
-      setOperations(response.data || []);
+
+      // Handle the API response structure: { success, data, pagination }
+      const operationsData = response.data && Array.isArray(response.data) ? response.data : [];
+      const paginationData = response.pagination || {};
+
+      setOperations(operationsData);
+
+      // Update pagination with data from the API response
       setPagination(prev => ({
         ...prev,
-        total: response.pagination?.total || 0,
-        totalPages: response.pagination?.totalPages || 1,
-        hasNextPage: response.pagination?.hasNextPage || false,
-        hasPreviousPage: response.pagination?.hasPreviousPage || false
+        total: paginationData.total || 0,
+        totalPages: paginationData.totalPages || 1,
+        hasNextPage: paginationData.hasNextPage || false,
+        hasPreviousPage: paginationData.hasPreviousPage || false
       }));
     } catch (err) {
       setError(err.message || 'Failed to fetch operations');
@@ -119,7 +127,7 @@ const OperationsPage = () => {
         const audioUrl = operation.audioFile.url.startsWith('http')
           ? operation.audioFile.url
           : `${window.location.origin}${operation.audioFile.url}`;
-        
+
         link.href = audioUrl;
         // Use the original filename if available, otherwise generate one
         const fileName = operation.audioFile.originalName || `audio_${operation.id}.mp3`;
@@ -145,7 +153,7 @@ const OperationsPage = () => {
       }
     } else {
       // For text results
-      const content = operation.result || 'No content available';
+      const content = operation.output || operation.result || 'No content available';
       const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -162,7 +170,7 @@ const OperationsPage = () => {
     const opType = operationTypes.find(t => t.id === type);
     const Icon = opType ? opType.icon : DocumentTextIcon;
     const color = opType ? opType.color : 'bg-gray-100 text-gray-800';
-    
+
     return (
       <div className={`flex-shrink-0 flex items-center justify-center h-10 w-10 rounded-lg ${color}`}>
         <Icon className="h-5 w-5" aria-hidden="true" />
@@ -288,7 +296,7 @@ const OperationsPage = () => {
               <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium text-gray-900">No operations</h3>
               <p className="mt-1 text-sm text-gray-500">
-                {searchQuery || selectedType !== 'all' 
+                {searchQuery || selectedType !== 'all'
                   ? 'No operations match your search criteria.'
                   : 'Get started by creating a new operation.'}
               </p>
@@ -296,13 +304,15 @@ const OperationsPage = () => {
           ) : (
             <ul className="divide-y divide-gray-200">
               {filteredOperations.map((operation) => (
-                <li key={operation.id}>
-                  <div className="px-4 py-4 sm:px-6 hover:bg-gray-50">
+                <li key={operation.id}
+                  className="cursor-pointer hover:bg-gray-50"
+                >
+                  <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         {getOperationIcon(operation.type)}
                         <div>
-                          <p className="text-sm font-medium text-indigo-600 truncate">
+                          <p className="text-sm font-medium text-indigo-600 truncate" onClick={() => navigate(`/operations/${operation.id}`)}>
                             {operationTypes.find(t => t.id === operation.type)?.name || 'Operation'}
                           </p>
                           <div className="flex items-center text-sm text-gray-500">

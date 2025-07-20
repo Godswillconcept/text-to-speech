@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import { useState, Fragment, useCallback } from 'react';
+import { useReducer, Fragment, useCallback } from 'react';
 import { Tab, Listbox, Transition } from '@headlessui/react';
 import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useApi } from '../hooks/useApi.js';
 import { summarizeText, summarizePdf } from '../utils/api.js';
+import { summarizerReducer, summarizerInitialState, summarizerActions } from '../reducers/summarizerReducer.js';
 import TextInput from '../components/TextInput';
 import DocumentUploader from '../components/DocumentUploader.jsx';
 
@@ -21,16 +22,8 @@ function classNames(...classes) {
 }
 
 const SummarizerPage = () => {
-  // State for the inputs
-  const [inputText, setInputText] = useState('');
-  const [file, setFile] = useState(null);
-
-  // State for summarization options
-  const [summaryLength, setSummaryLength] = useState('1');
-  const [summaryType, setSummaryType] = useState('paragraph');
-
-  // State for the output
-  const [summaryText, setSummaryText] = useState('');
+  const [state, dispatch] = useReducer(summarizerReducer, summarizerInitialState);
+  const { inputText, file, summaryLength, summaryType, summaryText } = state;
 
   // API hooks for both text and file summarization
   const { isLoading: isTextLoading, error: textError, request: summarizeFromText, clearError: clearTextError } = useApi(summarizeText);
@@ -40,7 +33,7 @@ const SummarizerPage = () => {
   const error = textError || fileError;
 
   const handleSummarize = async (tabIndex) => {
-    setSummaryText(''); // Clear previous results
+    dispatch(summarizerActions.clearSummary()); // Clear previous results
     let result;
 
     // Get the mapped length value (1-6)
@@ -70,17 +63,17 @@ const SummarizerPage = () => {
     }
 
     if (result && result.summary) {
-      setSummaryText(result.summary);
+      dispatch(summarizerActions.setSummaryText(result.summary));
     }
   };
 
   const handleTextChange = useCallback((text) => {
-    setInputText(text);
+    dispatch(summarizerActions.setInputText(text));
     if (textError) clearTextError();
   }, [textError, clearTextError]);
 
   const handleFileChange = useCallback((newFile) => {
-    setFile(newFile);
+    dispatch(summarizerActions.setFile(newFile));
     if (fileError) clearFileError();
   }, [fileError, clearFileError]);
 
@@ -162,7 +155,7 @@ const SummarizerPage = () => {
 
             <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-3">
               <div className="md:col-span-1">
-                <Listbox value={summaryType} onChange={setSummaryType}>
+                <Listbox value={summaryType} onChange={(type) => dispatch(summarizerActions.setSummaryType(type))}>
                   {({ open }) => (
                     <>
                       <Listbox.Label className="block text-sm font-medium text-gray-700">Format</Listbox.Label>
@@ -219,7 +212,7 @@ const SummarizerPage = () => {
                 </Listbox>
               </div>
               <div className="md:col-span-1">
-                <Listbox value={summaryLength} onChange={setSummaryLength}>
+                <Listbox value={summaryLength} onChange={(length) => dispatch(summarizerActions.setSummaryLength(length))}>
                   {({ open }) => (
                     <>
                       <Listbox.Label className="block text-sm font-medium text-gray-700">Length</Listbox.Label>
