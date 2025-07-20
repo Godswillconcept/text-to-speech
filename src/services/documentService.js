@@ -93,7 +93,7 @@ const extractText = async (fileInfo) => {
  * @returns {string} The extracted text
  */
 const extractTextFromPdf = async (fileInfo) => {
-  const dataBuffer = await fs.readFile(fileInfo.path);
+  const dataBuffer = fileInfo.buffer || await fs.readFile(fileInfo.path);
   const data = await pdf(dataBuffer);
   return data.text;
 };
@@ -104,7 +104,7 @@ const extractTextFromPdf = async (fileInfo) => {
  * @returns {string} The extracted text
  */
 const extractTextFromDoc = async (fileInfo) => {
-  const dataBuffer = await fs.readFile(fileInfo.path);
+  const dataBuffer = fileInfo.buffer || await fs.readFile(fileInfo.path);
   const result = await mammoth.extractRawText({ buffer: dataBuffer });
   return result.value;
 };

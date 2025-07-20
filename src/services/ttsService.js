@@ -175,12 +175,11 @@ const convertTextToSpeech = async (
     throw error;
   }
 
-  // Limit text length to 1000 characters (VoiceRSS limit for free tier)
-  const textToProcess = text.length > 1000 ? text.substring(0, 1000) : text;
-  console.log(
-    "TTS Service - Processing text (truncated to 1000 chars):",
-    textToProcess.length === text.length ? "No" : "Yes"
-  );
+  // Limit text length to 1500 characters for better processing
+  const textToProcess = text.length > 1500 ? text.substring(0, 1500) : text;
+  if (text.length > 1500) {
+    console.log("TTS Service - Text truncated from", text.length, "to", textToProcess.length, "characters");
+  }
 
   try {
     const params = new URLSearchParams();
@@ -204,49 +203,87 @@ const convertTextToSpeech = async (
     console.log("TTS Service - Sending request to VoiceRSS API:", {
       url: VOICE_RSS_API_URL,
       params: Object.fromEntries(params),
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "audio/mpeg",
-      },
+      textLength: textToProcess.length,
     });
 
     const response = await axios.post(VOICE_RSS_API_URL, params.toString(), {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
         Accept: "audio/mpeg",
+        "User-Agent": "TTS-Service/1.0"
       },
       responseType: "arraybuffer",
       validateStatus: () => true, // Don't throw on HTTP error status codes
+      timeout: 30000, // 30 second timeout
+      maxContentLength: 50 * 1024 * 1024, // 50MB max response size
     });
 
     console.log("TTS Service - Received response from VoiceRSS API:", {
       status: response.status,
       statusText: response.statusText,
-      headers: response.headers,
+      contentType: response.headers['content-type'],
       dataLength: response.data?.length || 0,
     });
 
-    // Check if response is an error message
-    let responseData;
-    try {
-      responseData = response.data.toString();
-      if (responseData.startsWith("ERROR")) {
-        const error = new Error(`VoiceRSS API error: ${responseData}`);
-        console.error("TTS Service - VoiceRSS API Error:", responseData);
-        throw error;
+    // Check for HTTP errors first
+    if (response.status < 200 || response.status >= 300) {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      
+      // Try to extract error message from response
+      try {
+        const errorText = Buffer.from(response.data).toString('utf8');
+        if (errorText.startsWith('ERROR')) {
+          errorMessage = errorText;
+        }
+      } catch (e) {
+        // Ignore parsing errors
       }
-    } catch (e) {
-      // If we can't parse as text, it's probably binary audio data
-      if (response.status >= 200 && response.status < 300) {
-        console.log("TTS Service - Successfully received audio data");
-        return Buffer.from(response.data);
-      }
-      throw e;
+      
+      throw new Error(`VoiceRSS API error: ${errorMessage}`);
     }
 
-    // If we got here, the response should be valid audio data
-    console.log("TTS Service - Successfully converted text to speech");
-    return Buffer.from(response.data);
+    // Validate response data
+    if (!response.data || response.data.length === 0) {
+      throw new Error('Received empty response from VoiceRSS API');
+    }
+
+    // Check if response is an error message (VoiceRSS returns errors as text)
+    const buffer = Buffer.from(response.data);
+    
+    // Check if it's a text error message
+    if (buffer.length < 1000) { // Error messages are typically short
+      try {
+        const responseText = buffer.toString('utf8');
+        if (responseText.startsWith("ERROR")) {
+          const error = new Error(`VoiceRSS API error: ${responseText}`);
+          console.error("TTS Service - VoiceRSS API Error:", responseText);
+          throw error;
+        }
+      } catch (e) {
+        // If we can't parse as text, it's probably binary audio data
+      }
+    }
+
+    // Validate audio data
+    if (buffer.length < 100) {
+      throw new Error('Received audio data is too small to be valid');
+    }
+
+    // Basic MP3 validation for MP3 codec
+    if (codec === 'MP3') {
+      const header = buffer.slice(0, 10);
+      const hasId3 = header.slice(0, 3).toString() === 'ID3';
+      const hasMp3Sync = (header[0] === 0xFF && (header[1] & 0xE0) === 0xE0);
+      
+      if (!hasId3 && !hasMp3Sync) {
+        console.warn('TTS Service - Warning: Generated audio may not be valid MP3 format');
+      } else {
+        console.log('TTS Service - MP3 format validation passed');
+      }
+    }
+
+    console.log(`TTS Service - Successfully converted text to speech: ${buffer.length} bytes`);
+    return buffer;
   } catch (error) {
     console.error("TTS Service - Error in VoiceRSS text-to-speech:", {
       message: error.message,

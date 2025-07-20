@@ -33,6 +33,10 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: true
       },
+      url: {
+        type: Sequelize.STRING,
+        allowNull: true
+      },
       userId: {
         type: Sequelize.INTEGER,
         allowNull: false,

@@ -325,7 +325,7 @@ const processDocumentWithOperation = async (req, res, next, operationType, proce
       'text/plain'
     ];
     
-    if (!supportedMimeTypes.includes(file.mimetype)) {
+    if (!supportedMimeTypes.includes(req.file.mimetype)) {
       const allowedTypes = supportedMimeTypes.map(mime => {
         if (mime.includes('pdf')) return 'PDF';
         if (mime.includes('msword') || mime.includes('wordprocessingml')) return 'DOC/DOCX';
@@ -338,16 +338,16 @@ const processDocumentWithOperation = async (req, res, next, operationType, proce
 
     let savedFile;
     try {
-      savedFile = await saveFile(file);
-      const { originalname, size } = file;
+      savedFile = await saveFile(req.file);
+      const { originalname, size, mimetype } = req.file;
 
       // Extract text from the document
       let extractedText;
       try {
         extractedText = await extractText({
           path: savedFile.path,
-          mimetype: file.mimetype,
-          originalname: file.originalname
+          mimetype: mimetype,
+          originalname: originalname
         });
       } catch (extractError) {
         console.error('Error extracting text from document:', extractError);
@@ -366,8 +366,9 @@ const processDocumentWithOperation = async (req, res, next, operationType, proce
 
       // Generate PDF version
       const pdfFileName = `${path.basename(savedFile.path, path.extname(savedFile.path))}.pdf`;
-      const pdfPath = path.join('outputs', pdfFileName);
-      await fs.mkdir('outputs', { recursive: true });
+      const outputsDir = path.join(process.cwd(), 'outputs');
+      await fs.mkdir(outputsDir, { recursive: true });
+      const pdfPath = path.join(outputsDir, pdfFileName);
       await pdfService.generatePdf(outputText, pdfPath);
 
       // Create operation record
@@ -379,7 +380,7 @@ const processDocumentWithOperation = async (req, res, next, operationType, proce
         userId: req.user.id,
         metadata: {
           originalFileName: originalname,
-          fileType: fileInfo.mimetype,
+          fileType: mimetype,
           fileSize: size,
           pdfOutputPath: pdfPath,
           ...req.body // Include any additional metadata from the request

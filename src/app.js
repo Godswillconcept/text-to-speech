@@ -5,6 +5,7 @@ const cors = require("cors");
 const session = require("express-session");
 const flash = require("connect-flash");
 const path = require("path");
+const fs = require("fs");
 
 // Import database and models
 const db = require("./models");
@@ -23,24 +24,55 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+// Enable CORS with proper configuration
 const corsOptions = {
-  origin:
-    process.env.NODE_ENV === "production"
-      ? process.env.FRONTEND_URL
-      : "http://localhost:3001",
-  credentials: true,
-  optionsSuccessStatus: 200, // For legacy browser support
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001'
+    ];
+    
+    // In production, add your production frontend URL
+    if (process.env.NODE_ENV === 'production' && process.env.FRONTEND_URL) {
+      allowedOrigins.push(process.env.FRONTEND_URL);
+    }
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true, // Allow credentials (cookies, authorization headers, etc.)
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
+
 app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 app.use(express.urlencoded({ extended: true }));
 
-const uploadsPath = path.join(__dirname, "..", "src", "uploads");
+// Ensure uploads directory exists - use src/uploads only
+const uploadsPath = path.join(__dirname, "uploads");
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath, { recursive: true });
+}
+// Serve files from src/uploads directory at /uploads route (unified approach)
 app.use("/uploads", express.static(uploadsPath));
 
-const outputPath = path.join(__dirname, "..", "output");
-app.use("/output", express.static(outputPath));
+// Ensure output directory exists
+const outputPath = path.join(__dirname, "..", "outputs");
+if (!fs.existsSync(outputPath)) {
+  fs.mkdirSync(outputPath, { recursive: true });
+}
+app.use("/outputs", express.static(outputPath));
 
 // Session configuration
 app.use(
@@ -78,7 +110,7 @@ const startServer = async () => {
     console.log("✅ Database connection has been established successfully.");
 
     // Sync all models
-    await db.sequelize.sync({ alter: true });
+    await db.sequelize.sync();
     console.log("🔄 Database synchronized");
 
     // Initialize AI service and log status

@@ -57,7 +57,7 @@ router.post(
         next();
       });
     },
-    check('voice', 'Voice is required').notEmpty()
+    check('voice', 'Voice is required').optional()
   ],
   ttsController.pdfToSpeech
 );

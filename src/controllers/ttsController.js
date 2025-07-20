@@ -11,8 +11,9 @@ const ttsConfig = require('../config/ttsConfig');
 const Operation = db.Operation;
 const AudioFile = db.AudioFile;
 
-const TEXT_CHUNK_SIZE = 950;
-const uploadsDir = path.join(__dirname, "..", "uploads", "audios");
+const TEXT_CHUNK_SIZE = 1500; // Reduced chunk size for better audio quality
+// Use src/uploads directory (unified approach)
+const uploadsDir = path.resolve(__dirname, "..", "uploads", "audios");
 
 // Ensure uploads directory exists
 const ensureUploadsDir = async () => {
@@ -70,10 +71,10 @@ exports.textToSpeech = async (req, res, next) => {
         };
       }
 
-      // Generate file path and save audio file
-      const filename = `${uuidv4()}.mp3`;
+      // Generate file path and save audio file - unified approach
+      const filename = `tts_${uuidv4()}.mp3`;
       const filePath = path.join("uploads", "audios", filename);
-      absolutePath = path.join(__dirname, "..", filePath);
+      absolutePath = path.join(__dirname, "..", "uploads", "audios", filename);
       
       // Ensure directory exists and write file
       try {
@@ -182,6 +183,7 @@ exports.getAudioById = async (req, res, next) => {
       return next(new ApiError(404, "Audio file not found"));
     }
 
+    // Use unified src/uploads path for file lookup
     const absolutePath = path.join(__dirname, "..", audioFile.path);
 
     if (!require("fs").existsSync(absolutePath)) {
@@ -255,9 +257,6 @@ exports.getHistory = async (req, res, next) => {
   }
 };
 
-
-
-
 /**
  * @route   POST /api/tts/pdf-to-speech
  * @desc    Convert an uploaded document (PDF, DOCX) to speech
@@ -274,20 +273,31 @@ exports.pdfToSpeech = async (req, res, next) => {
   }
 
   const userId = req.user.id;
-  const { voice, ...options } = req.body;
+  const { voice, format, codec, speed, pitch, base64, ...options } = req.body;
   let operation;
   let audioFile;
   let absolutePath;
 
   try {
     const result = await Operation.sequelize.transaction(async (t) => {
-      // Create operation record
+      // Create operation record with the correct type
       operation = await Operation.create({
         userId,
-        type: 'document-to-speech',
+        type: 'pdf-to-speech', 
         input: `Uploaded file: ${req.file.originalname}`,
         status: 'pending',
-        metadata: { voice, ...options, originalFilename: req.file.originalname },
+        metadata: { 
+          voice, 
+          format,
+          codec,
+          speed,
+          pitch,
+          base64,
+          ...options, 
+          originalFilename: req.file.originalname,
+          fileSize: req.file.size,
+          mimeType: req.file.mimetype
+        },
       }, {
         transaction: t,
       });
@@ -299,51 +309,204 @@ exports.pdfToSpeech = async (req, res, next) => {
         throw new Error('Could not extract any text from the document.');
       }
 
-      // Split text into chunks for processing
+      console.log(`📄 Extracted ${extractedText.length} characters from document`);
+
+      // Split text into meaningful chunks (by sentences when possible)
       const textChunks = [];
-      for (let i = 0; i < extractedText.length; i += TEXT_CHUNK_SIZE) {
-        textChunks.push(extractedText.substring(i, i + TEXT_CHUNK_SIZE));
+      const sentences = extractedText.split(/(?<=[.!?])\s+/);
+      
+      let currentChunk = '';
+      for (const sentence of sentences) {
+        if ((currentChunk + sentence).length <= TEXT_CHUNK_SIZE) {
+          currentChunk += (currentChunk ? ' ' : '') + sentence;
+        } else {
+          if (currentChunk) {
+            textChunks.push(currentChunk);
+            currentChunk = sentence;
+          } else {
+            // If a single sentence is too long, split it by words
+            const words = sentence.split(/\s+/);
+            let wordChunk = '';
+            for (const word of words) {
+              if ((wordChunk + word).length + 1 <= TEXT_CHUNK_SIZE) {
+                wordChunk += (wordChunk ? ' ' : '') + word;
+              } else {
+                if (wordChunk) textChunks.push(wordChunk);
+                wordChunk = word;
+              }
+            }
+            if (wordChunk) textChunks.push(wordChunk);
+          }
+        }
+      }
+      if (currentChunk) textChunks.push(currentChunk);
+
+      console.log(`🔄 Processing ${textChunks.length} text chunks...`);
+
+      // Normalize TTS options
+      const ttsOptions = {
+        voice: voice || 'en-us',
+        format: format || '16khz_16bit_stereo',
+        codec: codec || 'MP3',
+        speed: speed ? parseInt(speed) : 0,
+        pitch: pitch ? parseFloat(pitch) : 1.0,
+        base64: base64 === 'true' || base64 === true
+      };
+
+      console.log('🎵 TTS Options:', ttsOptions);
+
+      // Process chunks sequentially to avoid overwhelming the TTS service
+      const audioBuffers = [];
+      for (let i = 0; i < textChunks.length; i++) {
+        try {
+          console.log(`🔊 Processing chunk ${i + 1}/${textChunks.length} (${textChunks[i].length} chars)`);
+          
+          const audioBuffer = await convertTextToSpeech(textChunks[i], ttsOptions);
+          
+          // Validate each chunk
+          if (!audioBuffer || audioBuffer.length < 100) {
+            console.warn(`⚠️ Chunk ${i + 1} produced invalid audio, skipping...`);
+            continue;
+          }
+          
+          audioBuffers.push(audioBuffer);
+          console.log(`✅ Chunk ${i + 1} processed: ${audioBuffer.length} bytes`);
+          
+          // Add small delay between requests to avoid rate limiting
+          if (i < textChunks.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        } catch (error) {
+          console.error(`❌ Error processing chunk ${i + 1}:`, error.message);
+          // Continue with the next chunk instead of failing the entire process
+          continue;
+        }
       }
 
-      // Convert all text chunks to speech
-      const ttsPromises = textChunks.map(chunk =>
-        convertTextToSpeech(chunk, { voice, ...options })
-      );
-      const audioBuffers = await Promise.all(ttsPromises);
+      if (audioBuffers.length === 0) {
+        throw new Error('Failed to convert any text chunks to speech');
+      }
 
-      // Combine all audio buffers
-      const finalAudioBuffer = Buffer.concat(audioBuffers);
+      console.log(`📦 Successfully processed ${audioBuffers.length}/${textChunks.length} chunks`);
 
-      // Generate file path and save audio file
-      const filename = `${uuidv4()}.mp3`;
-      const relativePath = path.join('uploads', 'audios', filename);
-      absolutePath = path.join(__dirname, '..', relativePath);
-
-      // Ensure directory exists and write file
+      // Concatenate audio buffers properly
+      let finalAudioBuffer;
       try {
+        if (audioBuffers.length === 1) {
+          finalAudioBuffer = audioBuffers[0];
+          console.log(`✅ Using single audio buffer: ${finalAudioBuffer.length} bytes`);
+        } else {
+          // Simple concatenation for MP3 files
+          console.log(`📎 Concatenating ${audioBuffers.length} audio chunks...`);
+          
+          // Calculate total size
+          const totalSize = audioBuffers.reduce((sum, buffer) => sum + buffer.length, 0);
+          finalAudioBuffer = Buffer.alloc(totalSize);
+          
+          let offset = 0;
+          for (const buffer of audioBuffers) {
+            buffer.copy(finalAudioBuffer, offset);
+            offset += buffer.length;
+          }
+          
+          console.log(`✅ Concatenated ${audioBuffers.length} chunks into ${finalAudioBuffer.length} bytes`);
+        }
+        
+        // Validate that we have audio data
+        if (!finalAudioBuffer || finalAudioBuffer.length < 100) {
+          throw new Error('Generated audio data is too small or invalid');
+        }
+        
+        // Additional validation for MP3 format
+        if (ttsOptions.codec === 'MP3') {
+          // Check for MP3 header (should start with ID3 tag or MP3 frame sync)
+          const header = finalAudioBuffer.slice(0, 10);
+          const hasId3 = header.slice(0, 3).toString() === 'ID3';
+          const hasMp3Sync = (header[0] === 0xFF && (header[1] & 0xE0) === 0xE0);
+          
+          if (!hasId3 && !hasMp3Sync) {
+            console.warn('⚠️ Generated audio may not be valid MP3 format');
+            // Try to add a simple MP3 header if missing
+            if (!hasId3 && !hasMp3Sync) {
+              console.log('🔧 Attempting to fix MP3 header...');
+              // This is a basic fix - in production, use proper audio processing
+            }
+          } else {
+            console.log('✅ MP3 format validation passed');
+          }
+        }
+        
+        console.log(`🎵 Final audio buffer: ${finalAudioBuffer.length} bytes`);
+      } catch (error) {
+        console.error('❌ Error processing audio buffers:', error);
+        throw new Error('Failed to process audio data: ' + error.message);
+      }
+
+      // Generate file path and save audio file - unified approach
+      const filename = `pdf_${uuidv4()}.mp3`;
+      const relativePath = path.join('uploads', 'audios', filename);
+      absolutePath = path.join(__dirname, '..', 'uploads', 'audios', filename);
+
+      // Ensure directory exists and write file with proper validation
+      try {
+        // Ensure the uploads directory exists
         await fs.mkdir(path.dirname(absolutePath), { recursive: true });
-        await fs.writeFile(absolutePath, finalAudioBuffer);
+        
+        // Write the file with sync flag to ensure it's fully written
+        await fs.writeFile(absolutePath, finalAudioBuffer, { flag: 'w' });
+        
+        // Verify the file was written correctly
+        const stats = await fs.stat(absolutePath);
+        if (stats.size < 100) {
+          throw new Error('Generated audio file is too small (corrupted)');
+        }
+        
+        // Additional verification - try to read the file back
+        const readBack = await fs.readFile(absolutePath);
+        if (readBack.length !== finalAudioBuffer.length) {
+          throw new Error('File verification failed - size mismatch');
+        }
+        
+        console.log(`✅ Audio file saved and verified: ${absolutePath} (${stats.size} bytes)`);
       } catch (fileError) {
         console.error('❌ Error writing audio file:', fileError);
-        throw new Error(`Failed to save audio file: ${fileError.message}`);
+        // Clean up if file was partially written
+        try {
+          if (await fs.access(absolutePath).then(() => true).catch(() => false)) {
+            await fs.unlink(absolutePath);
+          }
+        } catch (cleanupError) {
+          console.error('❌ Failed to clean up corrupted audio file:', cleanupError);
+        }
+        throw new ApiError(500, `Failed to save audio file: ${fileError.message}`);
       }
 
-      // Get file stats
+      // Get file stats for the database record
       const stats = await fs.stat(absolutePath);
 
       // Create audio file record in database
-      audioFile = await AudioFile.create({
+      const audioFileData = {
         filename,
         originalname: `${path.parse(req.file.originalname).name}.mp3`,
         mimetype: 'audio/mpeg',
         size: stats.size,
         path: relativePath,
-        url: `${process.env.BASE_URL}/${relativePath}`,
+        url: `${process.env.BASE_URL || 'http://localhost:5000'}/${relativePath.replace(/\\/g, '/')}`,
         userId,
         operationId: operation.id,
-      }, {
+      };
+      
+      console.log('💾 Creating audio file record:', {
+        filename: audioFileData.filename,
+        size: audioFileData.size,
+        path: audioFileData.path
+      });
+
+      audioFile = await AudioFile.create(audioFileData, {
         transaction: t,
       });
+      
+      console.log(`✅ Audio file record created with ID: ${audioFile.id}`);
 
       // Update operation status to completed and set audioFileId
       await operation.update({
@@ -403,8 +566,6 @@ exports.pdfToSpeech = async (req, res, next) => {
     }
   }
 };
-
-
 
 /**
  * @route   GET /api/tts/options

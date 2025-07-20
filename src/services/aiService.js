@@ -40,34 +40,66 @@ const isAIServiceAvailable = () => isAIAvailable;
  * @param {Object} options - Additional options for text generation
  * @param {number} [options.maxOutputTokens=2048] - Maximum number of tokens to generate
  * @param {number} [options.temperature=0.7] - Controls randomness (0.0 to 1.0)
+ * @param {number} [options.retries=2] - Number of retry attempts for rate limits
  * @returns {Promise<string>} - The generated text
  */
-const generateText = async (prompt, { maxOutputTokens = 2048, temperature = 0.7 } = {}) => {
+const generateText = async (prompt, { 
+  maxOutputTokens = 2048, 
+  temperature = 0.7,
+  retries = 2 
+} = {}) => {
   if (!isAIAvailable) {
     throw new ApiError(503, 'AI service is currently unavailable. Please check your API key and try again.');
   }
 
-  try {
-    // Get the Gemini Pro model
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  let lastError;
+  
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-    // Generate content
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: {
-        maxOutputTokens,
-        temperature: Math.max(0, Math.min(1, temperature)),
-        topP: 0.95,
-        topK: 40
+      // Generate content
+      const result = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens,
+          temperature: Math.max(0, Math.min(1, temperature)),
+          topP: 0.95,
+          topK: 40
+        }
+      });
+
+      // Get the response text
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      lastError = error;
+      console.error(`Attempt ${attempt + 1} failed:`, error.message);
+      
+      // If it's a rate limit or service unavailable error, wait and retry
+      if ((error.status === 429 || error.status === 503) && attempt < retries) {
+        // Exponential backoff: 1s, 2s, 4s, etc.
+        const delayMs = Math.pow(2, attempt) * 1000;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
       }
-    });
+      
+      // If we've exhausted retries or it's a different error, break the loop
+      break;
+    }
+  }
 
-    // Get the response text
-    const response = await result.response;
-    return response.text();
-  } catch (error) {
-    console.error('Error in generateText:', error);
-    throw new ApiError(500, 'Failed to generate text with AI');
+  // If we get here, all retries failed
+  console.error('All retry attempts failed:', lastError);
+  
+  // Provide more specific error messages based on the error type
+  if (lastError.status === 429) {
+    throw new ApiError(429, 'AI service is currently experiencing high traffic. Please try again in a few moments.');
+  } else if (lastError.status === 503) {
+    throw new ApiError(503, 'AI service is temporarily unavailable. Please try again later.');
+  } else {
+    throw new ApiError(500, `Failed to generate text with AI: ${lastError.message || 'Unknown error'}`);
   }
 };
 
@@ -75,8 +107,8 @@ const generateText = async (prompt, { maxOutputTokens = 2048, temperature = 0.7 
  * Paraphrase the given text
  * @param {string} text - The text to paraphrase
  * @param {Object} options - Options for paraphrasing
- * @param {string} [options.tone='neutral'] - The tone to use (e.g., 'formal', 'casual', 'professional')
- * @param {string} [options.complexity='maintain'] - The complexity level ('simplify', 'maintain', 'enhance')
+ * @param {'standard'|'neutral'|'formal'|'casual'|'friendly'|'professional'|'academic'|'business'} [options.tone='neutral'] - The tone to use for paraphrasing
+ * @param {'simplify'|'maintain'|'enhance'} [options.complexity='maintain'] - The complexity level
  * @returns {Promise<string>} - The paraphrased text
  */
 const paraphraseText = async (text, { tone = 'neutral', complexity = 'maintain' } = {}) => {
