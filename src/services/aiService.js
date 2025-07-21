@@ -112,13 +112,22 @@ const generateText = async (prompt, {
  * @returns {Promise<string>} - The paraphrased text
  */
 const paraphraseText = async (text, { tone = 'neutral', complexity = 'maintain' } = {}) => {
-  const prompt = `Paraphrase the following text with a ${tone} tone and ${complexity} complexity. 
+  try {
+    console.log(`Paraphrasing text with tone: ${tone}, complexity: ${complexity}`);
+    const prompt = `Paraphrase the following text with a ${tone} tone and ${complexity} complexity. 
 Only respond with the paraphrased text, nothing else.\n\nText: "${text}"`;
-  
-  return await generateText(prompt, {
-    temperature: 0.7,
-    maxOutputTokens: 2048
-  });
+    
+    const result = await generateText(prompt, {
+      temperature: 0.7,
+      maxOutputTokens: 2048
+    });
+    
+    console.log('Paraphrasing completed successfully');
+    return result;
+  } catch (error) {
+    console.error('Error in paraphraseText:', error);
+    throw error;
+  }
 };
 
 /**
