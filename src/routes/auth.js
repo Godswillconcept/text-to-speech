@@ -101,4 +101,46 @@ router.get('/users',
   }
 );
 
+// @route   POST /api/auth/forgot-password
+// @desc    Request password reset OTP
+// @access  Public
+router.post(
+  '/forgot-password',
+  [
+    check('email', 'Please include a valid email').isEmail()
+  ],
+  (req, res, next) => {
+    authController.forgotPassword(req, res).catch(next);
+  }
+);
+
+// @route   POST /api/auth/validate-reset-otp
+// @desc    Validate password reset OTP
+// @access  Public
+router.post(
+  '/validate-reset-otp',
+  [
+    check('email', 'Please include a valid email').isEmail(),
+    check('otp', 'OTP is required').not().isEmpty()
+  ],
+  (req, res, next) => {
+    authController.validateResetOtp(req, res).catch(next);
+  }
+);
+
+// @route   POST /api/auth/reset-password
+// @desc    Reset password with OTP
+// @access  Public
+router.post(
+  '/reset-password',
+  [
+    check('email', 'Please include a valid email').isEmail(),
+    check('otp', 'OTP is required').not().isEmpty(),
+    check('password', 'Please enter a password with 6 or more characters').isLength({ min: 6 })
+  ],
+  (req, res, next) => {
+    authController.resetPassword(req, res).catch(next);
+  }
+);
+
 module.exports = router;

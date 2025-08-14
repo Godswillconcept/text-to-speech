@@ -17,6 +17,8 @@ const authRoutes = require("./routes/auth");
 const ttsRoutes = require("./routes/tts");
 const aiRoutes = require("./routes/ai");
 const operationRoutes = require("./routes/operations");
+const verificationRoutes = require("./routes/verification");
+const analyticsRoutes = require("./routes/analytics");
 const { errorHandler, notFound } = require("./middleware/errorHandler");
 
 const app = express();
@@ -95,6 +97,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/tts", ttsRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/operations", operationRoutes);
+app.use("/api/verification", verificationRoutes);
+app.use("/api/analytics", analyticsRoutes);
 
 // 404 handler
 app.use(notFound);

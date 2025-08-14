@@ -36,6 +36,11 @@ module.exports = (sequelize, DataTypes) => {
   isAdmin: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  email_verified: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false
   }
 }, {
   hooks: {

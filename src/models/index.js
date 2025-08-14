@@ -2,12 +2,14 @@ const { sequelize, DataTypes } = require('../config/database');
 const User = require('./User');
 const Operation = require('./Operation');
 const AudioFile = require('./AudioFile');
+const VerificationCode = require('./VerificationCode');
 
 // Initialize models
 const models = {
   User: User(sequelize, DataTypes),
   Operation: Operation(sequelize, DataTypes),
-  AudioFile: AudioFile(sequelize, DataTypes)
+  AudioFile: AudioFile(sequelize, DataTypes),
+  VerificationCode: VerificationCode(sequelize, DataTypes)
 };
 
 // Set up associations
