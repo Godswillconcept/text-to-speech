@@ -14,7 +14,7 @@
     "build:client": "npm run build --workspace=client",
     "lint": "npm run lint --workspaces",
     "format": "prettier --write \"**/*.{js,jsx,json}\"",
-    "prepare": "husky install"
+    "postinstall": "husky install"
   },
   "devDependencies": {
     "husky": "^9.0.0",
