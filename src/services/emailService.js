@@ -48,31 +48,35 @@ const createEtherealTransporter = async () => {
 
 // Initialize email transport
 const initializeEmailTransport = async () => {
-  // Always use Ethereal in development
+  // First try Gmail if credentials are available
+  if (process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      transporter = createGmailTransporter();
+      await transporter.verify();
+      console.log('Connected to Gmail SMTP server');
+      usingEthereal = false;
+      return true;
+    } catch (gmailError) {
+      console.warn('Failed to initialize Gmail SMTP, will try fallback:', gmailError.message);
+    }
+  } else {
+    console.warn('Gmail SMTP credentials not fully configured');
+  }
+
+  // Fall back to Ethereal if Gmail fails or not configured
   if (process.env.NODE_ENV !== 'production') {
     try {
       transporter = await createEtherealTransporter();
       usingEthereal = true;
-      console.log('Using Ethereal Email for development');
+      console.log('Using Ethereal Email as fallback');
       return true;
     } catch (etherealError) {
       console.error('Failed to initialize Ethereal Email:', etherealError);
     }
   }
 
-  // Try Gmail in production or if Ethereal fails in development
-  try {
-    if (process.env.SMTP_USER && process.env.SMTP_PASS) {
-      transporter = createGmailTransporter();
-      await transporter.verify();
-      console.log('Connected to Gmail SMTP server');
-      return true;
-    }
-    throw new Error('Gmail SMTP not configured');
-  } catch (error) {
-    console.error('Failed to initialize Gmail SMTP:', error.message);
-    return false;
-  }
+  console.error('No email transport available');
+  return false;
 };
 
 // Initialize on require
@@ -141,8 +145,8 @@ const sendPasswordResetEmail = async (email, otp) => {
   } catch (error) {
     console.error('Error sending password reset email:', error);
     
-    // Try to fall back to Ethereal if Gmail fails in development
-    if (!usingEthereal && process.env.NODE_ENV !== 'production') {
+    // Try to fall back to Ethereal if Gmail fails
+    if (!usingEthereal) {
       console.warn('Primary email failed, trying Ethereal fallback...');
       try {
         transporter = await createEtherealTransporter();
@@ -201,8 +205,8 @@ const sendVerificationEmail = async (email, verificationCode) => {
   } catch (error) {
     console.error('Error sending verification email:', error);
     
-    // Try to fall back to Ethereal if Gmail fails in development
-    if (!usingEthereal && process.env.NODE_ENV !== 'production') {
+    // Try to fall back to Ethereal if Gmail fails
+    if (!usingEthereal) {
       console.warn('Primary email failed, trying Ethereal fallback...');
       try {
         transporter = await createEtherealTransporter();
